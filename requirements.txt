@@ -6,3 +6,9 @@ nltk
 rouge
 sklearn
 matplotlib
+Unidecode
+rake_nltk
+scipy
+bert-serving
+bert-serving-client
+scikit-learn

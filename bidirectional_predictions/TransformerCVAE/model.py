@@ -2,7 +2,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import collections
 import json
-import logging
+# import logging
 import math
 import os
 
@@ -15,14 +15,15 @@ import torch.nn.functional as F
 import copy
 
 from transformers.modeling_utils import PreTrainedModel, Conv1D, prune_conv1d_layer, SequenceSummary
-from transformers.modeling_gpt2 import *
-from transformers.modeling_bert import gelu
-from transformers.configuration_gpt2 import GPT2Config
+from transformers.models.gpt2.modeling_gpt2 import *
+from transformers.activations import ACT2FN
+# from transformers.models.bert.modeling_bert import gelu
+from transformers import GPT2Config
 from transformers.file_utils import add_start_docstrings
 
-
+gelu = ACT2FN['gelu']
 ####################### auxiliary attention blocks #######################
-class Unmasked_Attention(Attention):
+class Unmasked_Attention(GPT2Attention):
     def _attn(self, q, k, v, attention_mask=None, head_mask=None):
         w = torch.matmul(q, k)
         if self.scale:
@@ -45,12 +46,12 @@ class Unmasked_Attention(Attention):
         return outputs
 
 
-class Unmasked_Block(Block):
+class Unmasked_Block(GPT2Block):
     def __init__(self, n_ctx, config, scale=False):
-        super(Block, self).__init__()
+        super(GPT2Block, self).__init__()
         nx = config.n_embd
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
-        self.attn = Unmasked_Attention(nx, n_ctx, config, scale)
+        self.attn = Unmasked_Attention(nx, n_ctx, config)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
@@ -97,13 +98,13 @@ class AverageSelfAttention(nn.Module):
 
 
 # Pseudo self-attention
-class Cond_Attention(Attention):
+class Cond_Attention(GPT2Attention):
     def __init__(self, nx, n_ctx, config, scale=False):
-        super(Attention, self).__init__()
+        super(GPT2Attention, self).__init__()
         self.output_attentions = config.output_attentions
 
-        n_state = nx  # in Attention: n_state=768 (nx=n_embd)
-        # [switch nx => n_state from Block to Attention to keep identical to TF implem]
+        n_state = nx  # in GPT2Attention: n_state=768 (nx=n_embd)
+        # [switch nx => n_state from GPT2Block to GPT2Attention to keep identical to TF implem]
         assert n_state % config.n_head == 0
         self.register_buffer("bias", torch.tril(torch.ones(n_ctx, n_ctx)).view(1, 1, n_ctx, n_ctx))
         self.n_head = config.n_head
@@ -178,9 +179,9 @@ class Cond_Attention(Attention):
         return outputs  # a, present, (attentions)
 
 
-class Cond_Block(Block):
+class Cond_Block(GPT2Block):
     def __init__(self, n_ctx, config, scale=False):
-        super(Block, self).__init__()
+        super(GPT2Block, self).__init__()
         nx = config.n_embd
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.attn = Cond_Attention(nx, n_ctx, config, scale)
@@ -207,7 +208,7 @@ class Encoder(GPT2Model):
         super(GPT2Model, self).__init__(config)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
-        self.output_past = config.output_past
+        self.use_cache = config.use_cache
 
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
@@ -263,7 +264,7 @@ class Encoder(GPT2Model):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
-        # Attention mask.
+        # GPT2Attention mask.
         if attention_mask is not None:
             attention_mask = attention_mask.view(-1, input_shape[-1])
             # We create a 3D attention mask from a 2D tensor mask.
@@ -323,7 +324,7 @@ class Encoder(GPT2Model):
             )
 
             hidden_states, present = outputs[:2]
-            if self.output_past:
+            if self.use_cache:
                 presents = presents + (present,)
 
             if self.output_attentions:
@@ -342,7 +343,7 @@ class Encoder(GPT2Model):
         logvar = self.logvar(representations)
 
         outputs = (mean, logvar, hidden_states,)
-        if self.output_past:
+        if self.use_cache:
             outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
@@ -366,7 +367,7 @@ class Decoder(GPT2Model):
 
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
-        self.output_past = config.output_past
+        self.use_cache = config.use_cache
 
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
@@ -389,7 +390,7 @@ class Decoder(GPT2Model):
 
             self.h = nn.ModuleList([Cond_Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
         else:
-            self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
+            self.h = nn.ModuleList([GPT2Block(config) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
         self.init_weights()
@@ -430,7 +431,7 @@ class Decoder(GPT2Model):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
-        # Attention mask.
+        # GPT2Attention mask.
         if attention_mask is not None:
             attention_mask = attention_mask.view(-1, input_shape[-1])
             # We create a 3D attention mask from a 2D tensor mask.
@@ -514,7 +515,7 @@ class Decoder(GPT2Model):
                 )
 
             hidden_states, present = outputs[:2]
-            if self.output_past:
+            if self.use_cache:
                 presents = presents + (present,)
 
             if self.output_attentions:
@@ -528,7 +529,7 @@ class Decoder(GPT2Model):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_past:
+        if self.use_cache:
             outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)

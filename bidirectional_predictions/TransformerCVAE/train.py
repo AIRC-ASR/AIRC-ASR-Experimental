@@ -12,7 +12,9 @@ from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config, AdamW, get_
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 import importlib
-import logging
+# import logging
+from transformers.utils import logging
+logger = logging.get_logger("transformers")
 import copy
 
 from apex.optimizers import FusedAdam
@@ -304,12 +306,12 @@ def main():
     os.makedirs(save_folder, exist_ok=True)
     t_writer = SummaryWriter(os.path.join(save_folder, 'train'), flush_secs=5)
     v_writer = SummaryWriter(os.path.join(save_folder, 'val'), flush_secs=5)
-    importlib.reload(logging)
-    logging.basicConfig(filename=os.path.join(save_folder, 'train.log'),
-                        level=logging.INFO, format='%(asctime)s--- %(message)s')
-    logging.info('\n*******************************************************************************\n')
-    logging.info("the configuration:")
-    logging.info(str(args).replace(',', '\n'))
+    # importlib.reload(logger)
+    # logger.basicConfig(filename=os.path.join(save_folder, 'train.log'),
+    #                     level=logger.INFO, format='%(asctime)s--- %(message)s')
+    logger.info('\n*******************************************************************************\n')
+    logger.info("the configuration:")
+    logger.info(str(args).replace(',', '\n'))
 
     print('Loading models...')
     cache_dir = os.path.join(args.out_dir, 'model_cache')
@@ -405,9 +407,9 @@ def main():
     print('Done.')
 
     print('Begin training iterations')
-    logging.info("Begin training iterations")
+    logger.info("Begin training iterations")
     max_val_batches = 20000  # max num. of val batches
-    logging.info("Total iteration: %d" % args.iterations)
+    logger.info("Total iteration: %d" % args.iterations)
     e = 0  # number of epoch
     num_iters = 0
     optimizer.zero_grad()
@@ -422,8 +424,8 @@ def main():
         logp_sum = 0.0
         kl_loss_sum = 0.0
 
-        logging.info("Validation loop.         Batches: %d" % len(val_loader))
-        logging.info("Validation loop. max_val_batches: %d" % max_val_batches)
+        logger.info("Validation loop.         Batches: %d" % len(val_loader))
+        logger.info("Validation loop. max_val_batches: %d" % max_val_batches)
 
         # val_iter = iter(val_loader); x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask = next(val_iter)
         with tqdm(total=min(len(val_loader), max_val_batches)) as pbar:
@@ -482,10 +484,10 @@ def main():
         v_writer.add_scalar('ppl_bpe', ppl_bpe, num_iters)
         v_writer.add_scalar('ppl_word', ppl_word, num_iters)
         v_writer.add_scalar('kl', kl, num_iters)
-        logging.info('val loss    : %.4f' % loss_bpe)
-        logging.info('val ppl_bpe : %.4f' % ppl_bpe)
-        logging.info('val ppl_word: %.4f' % ppl_word)
-        logging.info('val   kl    : %.4f' % kl)
+        logger.info('val loss    : %.4f' % loss_bpe)
+        logger.info('val ppl_bpe : %.4f' % ppl_bpe)
+        logger.info('val ppl_word: %.4f' % ppl_word)
+        logger.info('val   kl    : %.4f' % kl)
 
         VAE.train()
 
@@ -717,15 +719,15 @@ def main():
                     samples_file.flush()
 
         print('Test complete with %05d samples.' % n_samples)
-        logging.info("Test complete with %05d samples.", n_samples)
-        logging.info("Iteration completed: %d" % num_iters)
+        logger.info("Test complete with %05d samples.", n_samples)
+        logger.info("Iteration completed: %d" % num_iters)
 
         bleu4 = round(bleu4_sum / n_samples, 3)
         rouge_scores_values = [round(r / n_samples, 3) for r in rouge_scores_values_sum]
         print(' bleu-4:', bleu4)
         print(' rouge :', rouge_scores_values)
-        logging.info(' bleu-4: %f', bleu4)
-        logging.info(' rouge : %s', str(rouge_scores_values))
+        logger.info(' bleu-4: %f', bleu4)
+        logger.info(' rouge : %s', str(rouge_scores_values))
 
         VAE.train()
 
@@ -740,8 +742,8 @@ def main():
 
         # Training
         print('Training loop. Batches:', len(train_loader))
-        logging.info('\n----------------------------------------------------------------------')
-        logging.info("Training loop.       Batches: %d" % len(train_loader))
+        logger.info('\n----------------------------------------------------------------------')
+        logger.info("Training loop.       Batches: %d" % len(train_loader))
 
         # train_iter = iter(train_loader); x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask = next(train_iter)
         with tqdm(total=len(train_loader)) as pbar:
@@ -787,7 +789,7 @@ def main():
 
                 if num_iters % args.cycle == 0:
                     beta = args.beta_0
-                    logging.info('KL annealing restart')
+                    logger.info('KL annealing restart')
 
                 if num_iters % 10000 == 0:
                     test_plot(test_loader, num_iters)
@@ -796,14 +798,14 @@ def main():
 
                 if num_iters % 50000 == 0:
                     print('Saving model...')
-                    logging.info("Iteration completed: %d, remained %d" % (num_iters, args.iterations - num_iters))
-                    logging.info("Saving model...")
-                    logging.info('\n------------------------------------------------------')
+                    logger.info("Iteration completed: %d, remained %d" % (num_iters, args.iterations - num_iters))
+                    logger.info("Saving model...")
+                    logger.info('\n------------------------------------------------------')
                     torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + '.pt'))
 
                 if args.switch_time > 0 and num_iters == int(args.iterations * args.switch_time):
                     print('Switch to long sequence training')
-                    logging.info("Switch to long sequence training")
+                    logger.info("Switch to long sequence training")
                     cur_b_schedule += 1
                     train_loader, val_loader, test_loader = prepare_dataset(
                         args.data_dir, args.dataset, tokenizer,
@@ -815,11 +817,11 @@ def main():
                     )
         if not end:
             e += 1
-            logging.info("Training loop. The ith epoch completed: %d" % e)
+            logger.info("Training loop. The ith epoch completed: %d" % e)
 
     torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_latest.pt'))
     print('Training complete.')
-    logging.info("Training complete.")
+    logger.info("Training complete.")
 
 
 if __name__ == "__main__":
