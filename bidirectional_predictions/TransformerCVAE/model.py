@@ -530,8 +530,8 @@ class Decoder(GPT2Model):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        # if self.use_cache:
-        #     outputs = outputs + (presents,)
+        if self.use_cache:
+            outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:

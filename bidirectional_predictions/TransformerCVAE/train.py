@@ -8,7 +8,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import numpy as np
 import transformers
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config, AdamW, get_linear_schedule_with_warmup, Conv1D
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config, get_linear_schedule_with_warmup, Conv1D
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 import importlib
@@ -18,7 +18,8 @@ logger = logging.get_logger("transformers")
 import copy
 
 from apex.optimizers import FusedAdam
-from apex import amp
+# from apex import amp
+from torch import amp
 from apex.fp16_utils import FP16_Optimizer
 
 from data.util import *
@@ -400,9 +401,9 @@ def main():
     VAE = VAE.to(device)
     VAE.train()
 
-    optimizer = AdamW(VAE.parameters(), lr=args.lr, correct_bias=True)
+    optimizer = torch.optim.AdamW(VAE.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_schedule)
-    VAE, optimizer = amp.initialize(VAE, optimizer, opt_level=args.fp16_opt_level)
+    # VAE, optimizer = amp.initialize(VAE, optimizer, opt_level=args.fp16_opt_level)
 
     loss_fn = nn.CrossEntropyLoss(reduction='none')
     print('Done.')

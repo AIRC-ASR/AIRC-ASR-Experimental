@@ -8,7 +8,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import numpy as np
 import transformers
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config, AdamW, get_linear_schedule_with_warmup, Conv1D
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config, get_linear_schedule_with_warmup, Conv1D
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 import importlib
