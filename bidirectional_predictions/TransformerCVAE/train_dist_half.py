@@ -17,6 +17,7 @@ import copy
 
 from apex.optimizers import FusedAdam
 from apex import amp
+# from torch import amp
 from apex.fp16_utils import FP16_Optimizer
 
 from apex.parallel import DistributedDataParallel as DDP
@@ -38,8 +39,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-devices = '3,2,1,0'
-os.environ["CUDA_VISIBLE_DEVICES"] = devices
+# devices = '3,2,1,0'
+# os.environ["CUDA_VISIBLE_DEVICES"] = devices
 
 
 def compute_loss(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta):
@@ -236,10 +237,12 @@ def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
     print("There are ", torch.cuda.device_count(), " available GPUs!")
     # print('Setting GPUs {}'.format(args.device))
-    print('Using GPU devices {}'.format(devices))
-    device = torch.device('cuda', args.gpu)
-    torch.cuda.set_device(device)
-    print('Current single GPU: {}'.format(torch.cuda.current_device()))
+    # print('Using GPU devices {}'.format(devices))
+    # device = torch.device('cuda', args.gpu)
+    # torch.cuda.set_device(device)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if device.type == 'cuda':
+        print('Current single GPU: {}'.format(torch.cuda.current_device()))
 
     # randomness
     np.random.seed(args.seed)
@@ -291,6 +294,7 @@ def main_worker(gpu, ngpus_per_node, args):
     gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir=cache_dir)
     print('gpt2_params:', num_params(gpt2_model))  # gpt2: 124439808
     config = GPT2Config()
+    config.n_ctx = 1024
 
     # # add special tokens
     # special_tokens_dict = {
