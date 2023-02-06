@@ -323,6 +323,7 @@ def main():
     gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir=cache_dir)
     print('gpt2_params:', num_params(gpt2_model))  # gpt2: 124439808
     config = GPT2Config()
+    config.n_ctx = 1024
 
     # add special tokens
     # special_tokens_dict = {

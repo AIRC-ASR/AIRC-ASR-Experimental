@@ -51,9 +51,9 @@ class Unmasked_Block(GPT2Block):
         super(GPT2Block, self).__init__()
         nx = config.n_embd
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
-        self.attn = Unmasked_Attention(nx, n_ctx, config)
+        self.attn = Unmasked_Attention(config)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
-        self.mlp = MLP(4 * nx, config)
+        self.mlp = GPT2MLP(4 * nx, config)
 
 
 class AverageSelfAttention(nn.Module):
@@ -186,7 +186,7 @@ class Cond_Block(GPT2Block):
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.attn = Cond_Attention(nx, n_ctx, config, scale)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
-        self.mlp = MLP(4 * nx, config)
+        self.mlp = GPT2MLP(4 * nx, config)
 
     def forward(self, x, z, layer_past=None, attention_mask=None, head_mask=None):
         output_attn = self.attn(
