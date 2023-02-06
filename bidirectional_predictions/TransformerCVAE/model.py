@@ -426,7 +426,7 @@ class Decoder(GPT2Model):
             past_length = 0
             past = [None] * len(self.h)
         else:
-            past_length = past[0][0].size(-2)
+            past_length = len(past)
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)

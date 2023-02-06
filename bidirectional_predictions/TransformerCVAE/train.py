@@ -19,7 +19,7 @@ import copy
 
 from apex.optimizers import FusedAdam
 # from apex import amp
-from torch import amp
+from torch.cuda import amp
 from apex.fp16_utils import FP16_Optimizer
 
 from data.util import *
@@ -99,27 +99,34 @@ def compute_loss_ae(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tok
 
 def train_step(device, model, optimizer, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta, model_type):
     output = []
+    scaler = amp.GradScaler()
     if model_type == 'ae_vae_fusion':
         optimizer.zero_grad()
         loss, ce_loss, kl_loss = compute_loss_ae(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tokens,
                                               target_tokens, mask, loss_fn, beta)
-        with amp.scale_loss(loss, optimizer) as scaled_loss:
-            scaled_loss.backward()
-            torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 5.0)  # max_grad_norm=1.0
+        scaler.scale(loss).backward()
+        # with amp.scale_loss(loss, optimizer) as scaled_loss:
+        #     scaled_loss.backward()
+        # torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 5.0)  # max_grad_norm=1.0
         # loss.backward()
-        # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # max_grad_norm=1.0
-        optimizer.step()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # max_grad_norm=1.0
+        # optimizer.step()
+        scaler.step(optimizer)
+        scaler.update()
         output.append((loss.item(), ce_loss.mean().item(), kl_loss.item()))
 
     optimizer.zero_grad()
     loss, ce_loss, kl_loss = compute_loss(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tokens,
                                           target_tokens, mask, loss_fn, beta)
-    with amp.scale_loss(loss, optimizer) as scaled_loss:
-        scaled_loss.backward()
-        torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 5.0)  # max_grad_norm=1.0
+    # with amp.scale_loss(loss, optimizer) as scaled_loss:
+    #     scaled_loss.backward()
+    scaler.scale(loss).backward()
+    # torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 5.0)  # max_grad_norm=1.0
     # loss.backward()
-    # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # max_grad_norm=1.0
-    optimizer.step()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # max_grad_norm=1.0
+    # optimizer.step()
+    scaler.step(optimizer)
+    scaler.update()
     output.append((loss.item(), ce_loss.mean().item(), kl_loss.item()))
 
     return output
@@ -625,6 +632,7 @@ def main():
                     test_loader):
 
                 if i_test >= 10: break
+                if n_samples == 0: break
 
                 length = -1
                 if length == -1:
@@ -724,14 +732,15 @@ def main():
         logger.info("Test complete with %05d samples.", n_samples)
         logger.info("Iteration completed: %d" % num_iters)
 
-        bleu4 = round(bleu4_sum / n_samples, 3)
-        rouge_scores_values = [round(r / n_samples, 3) for r in rouge_scores_values_sum]
-        print(' bleu-4:', bleu4)
-        print(' rouge :', rouge_scores_values)
-        logger.info(' bleu-4: %f', bleu4)
-        logger.info(' rouge : %s', str(rouge_scores_values))
+        if n_samples != 0:
+            bleu4 = round(bleu4_sum / n_samples, 3)
+            rouge_scores_values = [round(r / n_samples, 3) for r in rouge_scores_values_sum]
+            print(' bleu-4:', bleu4)
+            print(' rouge :', rouge_scores_values)
+            logger.info(' bleu-4: %f', bleu4)
+            logger.info(' rouge : %s', str(rouge_scores_values))
 
-        VAE.train()
+            VAE.train()
 
     test_plot(test_loader, num_iters)
     val_step(val_loader)
