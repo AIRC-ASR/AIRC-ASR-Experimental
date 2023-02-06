@@ -51,7 +51,7 @@ class Unmasked_Block(GPT2Block):
         super(GPT2Block, self).__init__()
         nx = config.n_embd
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
-        self.attn = Unmasked_Attention(config)
+        self.attn = GPT2Attention(config)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = GPT2MLP(4 * nx, config)
 
@@ -323,9 +323,10 @@ class Encoder(GPT2Model):
                 hidden_states, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i]
             )
 
-            hidden_states, present = outputs[:2]
-            if self.use_cache:
-                presents = presents + (present,)
+            hidden_states = outputs[0]
+            # print('hidden_states', hidden_states)
+            # if self.use_cache:
+            #     presents = presents + (present,)
 
             if self.output_attentions:
                 all_attentions.append(outputs[2])
@@ -343,8 +344,8 @@ class Encoder(GPT2Model):
         logvar = self.logvar(representations)
 
         outputs = (mean, logvar, hidden_states,)
-        if self.use_cache:
-            outputs = outputs + (presents,)
+        # if self.use_cache:
+        #     outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
@@ -514,9 +515,9 @@ class Decoder(GPT2Model):
                     hidden_states, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i]
                 )
 
-            hidden_states, present = outputs[:2]
-            if self.use_cache:
-                presents = presents + (present,)
+            hidden_states = outputs[0]
+            # if self.use_cache:
+            #     presents = presents + (present,)
 
             if self.output_attentions:
                 all_attentions.append(outputs[2])
@@ -529,8 +530,8 @@ class Decoder(GPT2Model):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.use_cache:
-            outputs = outputs + (presents,)
+        # if self.use_cache:
+        #     outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
