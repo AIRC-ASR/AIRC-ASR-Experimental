@@ -760,9 +760,6 @@ def main():
         with tqdm(total=len(train_loader)) as pbar:
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
                 # NOTE: Swaps all the variables for the bidirectional running of the program
-                x_mask, y_mask = y_mask, x_mask
-                x_tokens, y_tokens = y_tokens, x_tokens
-                input_tokens, target_tokens = target_tokens, input_tokens
 
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                 #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
@@ -773,9 +770,20 @@ def main():
                         parameter.requires_grad = True
                     tuning_all = True
 
-                output = train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+                # This computes a training step going from input to output and computes the losses
+                output_forward = train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
                                     input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
-                loss, ce_loss, kl_loss = output[-1]
+                loss_forward, ce_loss_forward, kl_loss_forward = output_forward[-1]
+
+                # This computes a training step going from output to input and computes the losses
+                output_backward = train_step(device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
+                                    target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)
+                loss_backward, ce_loss_backward, kl_loss_backward = output_backward[-1]
+
+                # This finds the overall loss by summing over the forward and backward loss
+                loss = loss_forward + loss_backward
+                ce_loss = ce_loss_forward + ce_loss_backward
+                kl_loss = kl_loss_forward + kl_loss_backward
 
                 lr = scheduler.get_last_lr()[0]
                 # Log to Tensorboard
