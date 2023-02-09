@@ -1,0 +1,6 @@
+For the Bidirectional Sentence Prediction
+Input ID Encoding 13 = "." for the GPT2Tokenizer -- we can use this to split between sentences in text
+Everyt
+
+                    # generate_bidirectional_prompts(test_loader, num_iters)
+                    generate_bidirectional_previous_sentence(test_loader, num_iters)

@@ -747,6 +747,27 @@ def main():
     generate(test_loader, num_iters)
     torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + '.pt'))
 
+    def find_loss_bidirectional(
+        loss_type, device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
+        target_tokens, input_tokens, mask, loss_fn, beta, model_type
+    ):
+        '''This function finds the bidirectional loss on different levels.
+        loss_types designates the possible loss types: 
+            "previous_sentence": The latest sentence needs to predict the previous one and vice versa.
+            "previous_sentences" The latest sentence needs to predict the previous ones and vice versa.
+            "prompt": The prompt predicts the target story and vice versa.
+        All other arguments are the same as train_step()
+        '''
+        if loss_type == "previous_sentence":
+            pass
+        elif loss_type == "previous_sentences":
+            pass
+        elif loss_type == "prompt":
+            return train_step(device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
+                target_tokens, input_tokens, mask, loss_fn, beta, model_type)
+        
+        return None
+
     while num_iters < args.iterations:
         # Run epoch
         st = time.time()
@@ -760,9 +781,9 @@ def main():
         with tqdm(total=len(train_loader)) as pbar:
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
                 # NOTE: Swaps all the variables for the bidirectional running of the program
-
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                 #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
+                print("y_tokens", y_tokens)
 
                 if not tuning_all and num_iters >= tuning_all_after_iters:
                     for name, parameter in VAE.named_parameters():
@@ -775,15 +796,29 @@ def main():
                                     input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
                 loss_forward, ce_loss_forward, kl_loss_forward = output_forward[-1]
 
-                # This computes a training step going from output to input and computes the losses
-                output_backward = train_step(device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
+                # This computes a training step going from output to input and computes the losses                
+                output_prompt_backward = find_loss_bidirectional("prompt", device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
                                     target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)
-                loss_backward, ce_loss_backward, kl_loss_backward = output_backward[-1]
+                loss_prompt_backward, ce_prompt_loss_backward, kl_prompt_loss_backward = output_prompt_backward[-1]
+                
+                split_sentences = split_tokenized_sentences(y_tokens[0])
+                print("split_sentences", split_sentences)
+
+                # TODO: Move into find_loss_bidirectional()
+                for i in range(len(split_sentences) - 1):
+                    sentence_a, sentence_b = split_sentences[i], split_sentences[i + 1]
+                    # TODO:Configure calls to train_step_properly
+                    train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+                                    input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
+
+                # output_previous_sentence_backward = find_loss_bidirectional("previous_sentences", device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+                #                     input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
+                # loss_previous_sentence_backward, ce_previous_sentence_loss_backward, kl_previous_sentence_loss_backward = output_previous_sentence_backward[-1]
 
                 # This finds the overall loss by summing over the forward and backward loss
-                loss = loss_forward + loss_backward
-                ce_loss = ce_loss_forward + ce_loss_backward
-                kl_loss = kl_loss_forward + kl_loss_backward
+                loss = loss_forward + loss_prompt_backward
+                ce_loss = ce_loss_forward + ce_prompt_loss_backward
+                kl_loss = kl_loss_forward + kl_prompt_loss_backward
 
                 lr = scheduler.get_last_lr()[0]
                 # Log to Tensorboard
