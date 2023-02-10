@@ -779,7 +779,7 @@ def main():
 
         # train_iter = iter(train_loader); x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask = next(train_iter)
         with tqdm(total=len(train_loader)) as pbar:
-            for i in range(len(train_loader)) - 1:
+            for i in range(len(train_loader) - 1):
                 (x_mask_a, x_tokens_a, y_mask_a, y_tokens_a, input_tokens_a, target_tokens_a, mask_a) = train_loader[i]
                 (x_mask_b, x_tokens_b, y_mask_b, y_tokens_b, input_tokens_b, target_tokens_b, mask_b) = train_loader[i + 1]
 
@@ -810,29 +810,15 @@ def main():
                         input_tokens_b, target_tokens_a, mask_b, loss_fn, beta, args.model_type)
                 loss_sentence_b_a, ce_loss_sentence_b_a, kl_loss_sentence_b_a = output_sentence_b_a[-1]
 
-                # This computes a training step going from output to input and computes the losses                
-                output_prompt_backward = find_loss_bidirectional("prompt", device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
-                                    target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)
-                loss_prompt_backward, ce_prompt_loss_backward, kl_prompt_loss_backward = output_prompt_backward[-1]
-                
-                split_sentences = split_tokenized_sentences(y_tokens[0])
-                print("split_sentences", split_sentences)
+                # SENTENCE TO PROMPT LEVEL LOSS, Sentence A -> Prompt A
+                output_sentence_a_prompt_a = train_step(device, VAE, optimizer, y_mask_a, y_tokens_a, x_mask_a, x_tokens_a,
+                        target_tokens_a, input_tokens_a, mask_a, loss_fn, beta, args.model_type)
+                loss_sentence_a_prompt_a, ce_loss_sentence_a_prompt_a, kl_loss_sentence_a_prompt_a = output_sentence_a_prompt_a[-1]
 
-                # TODO: Move into find_loss_bidirectional()
-                for i in range(len(split_sentences) - 1):
-                    sentence_a, sentence_b = split_sentences[i], split_sentences[i + 1]
-                    # TODO:Configure calls to train_step_properly
-                    train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-                                    input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
-
-                # output_previous_sentence_backward = find_loss_bidirectional("previous_sentences", device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-                #                     input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
-                # loss_previous_sentence_backward, ce_previous_sentence_loss_backward, kl_previous_sentence_loss_backward = output_previous_sentence_backward[-1]
-
-                # This finds the overall loss by summing over the forward and backward loss
-                loss = loss_forward + loss_prompt_backward
-                ce_loss = ce_loss_forward + ce_prompt_loss_backward
-                kl_loss = kl_loss_forward + kl_prompt_loss_backward
+                # This finds the overall loss by summing over the forward and sentence level losses
+                loss = loss_forward + loss_sentence_a_b + loss_sentence_b_a
+                ce_loss = ce_loss_forward + ce_loss_sentence_a_b + ce_loss_sentence_b_a
+                kl_loss = kl_loss_forward + kl_loss_sentence_a_b + kl_loss_sentence_b_a
 
                 lr = scheduler.get_last_lr()[0]
                 # Log to Tensorboard

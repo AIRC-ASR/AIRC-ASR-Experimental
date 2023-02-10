@@ -54,26 +54,3 @@ def linear_schedule(args):
         return max((e - args.iterations) / (args.warmup - args.iterations), 0)
 
     return f
-
-def split_tokenized_sentences(input_ids):
-    '''This functions splits a list of input IDs on a period, "." into a list of lists
-      where each sublist represents a sentence.'''
-    sentences = []
-    sentence = []
-    PERIOD_INPUT_ID = 13
-
-    for input_id in input_ids:
-        # Split each sentence into its own list based on the "." input ID
-        input_id = input_id.item()
-        sentence.append(input_id)
-        print('input_id', input_id)
-        if input_id == PERIOD_INPUT_ID:
-            sentences.append(sentence.copy())
-            sentence = []
-
-    # Add on <EOS> to end of last sentence
-    if len(sentences):
-        sentences[-1].append(sentence)
-
-    # FIXME: Convert to Pytorch tensor
-    return sentences
