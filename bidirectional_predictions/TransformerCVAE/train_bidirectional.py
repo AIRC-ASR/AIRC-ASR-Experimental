@@ -17,10 +17,10 @@ from transformers.utils import logging
 logger = logging.get_logger("transformers")
 import copy
 
-from apex.optimizers import FusedAdam
+# from apex.optimizers import FusedAdam
 # from apex import amp
 from torch.cuda import amp
-from apex.fp16_utils import FP16_Optimizer
+# from apex.fp16_utils import FP16_Optimizer
 
 from data.util import *
 from util import *
@@ -779,11 +779,14 @@ def main():
 
         # train_iter = iter(train_loader); x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask = next(train_iter)
         with tqdm(total=len(train_loader)) as pbar:
-            for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
+            for i in range(len(train_loader)) - 1:
+                (x_mask_a, x_tokens_a, y_mask_a, y_tokens_a, input_tokens_a, target_tokens_a, mask_a) = train_loader[i]
+                (x_mask_b, x_tokens_b, y_mask_b, y_tokens_b, input_tokens_b, target_tokens_b, mask_b) = train_loader[i + 1]
+
+                print("x_tokens_a", tokenizer.decode(x_tokens_a[0, :][x_mask_a[0, :] == 1].tolist()))
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                 #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
-                print("y_tokens", y_tokens)
 
                 if not tuning_all and num_iters >= tuning_all_after_iters:
                     for name, parameter in VAE.named_parameters():
@@ -792,9 +795,20 @@ def main():
                     tuning_all = True
 
                 # This computes a training step going from input to output and computes the losses
-                output_forward = train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-                                    input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
+                # NORMAL LOSS, Prompt -> Story
+                output_forward = train_step(device, VAE, optimizer, x_mask_a, x_tokens_a, y_mask_a, y_tokens_a,
+                        input_tokens_a, target_tokens_a, mask_a, loss_fn, beta, args.model_type)
                 loss_forward, ce_loss_forward, kl_loss_forward = output_forward[-1]
+
+                # SENTENCE LEVEL LOSS, Sentence A -> Sentence B
+                output_sentence_a_b = train_step(device, VAE, optimizer, x_mask_a, x_tokens_a, y_mask_b, y_tokens_b,
+                        input_tokens_a, target_tokens_b, mask_a, loss_fn, beta, args.model_type)
+                loss_sentence_a_b, ce_loss_sentence_a_b, kl_loss_sentence_a_b = output_sentence_a_b[-1]
+
+                # SENTENCE LEVEL LOSS, Sentence B -> Sentence A
+                output_sentence_b_a = train_step(device, VAE, optimizer, x_mask_b, x_tokens_b, y_mask_a, y_tokens_a,
+                        input_tokens_b, target_tokens_a, mask_b, loss_fn, beta, args.model_type)
+                loss_sentence_b_a, ce_loss_sentence_b_a, kl_loss_sentence_b_a = output_sentence_b_a[-1]
 
                 # This computes a training step going from output to input and computes the losses                
                 output_prompt_backward = find_loss_bidirectional("prompt", device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
