@@ -786,17 +786,31 @@ def main():
         # train_iter = iter(train_loader); x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask = next(train_iter)
         train_iter = iter(train_loader)
         with tqdm(total=len(train_loader)) as pbar:
-            for i in range(len(train_loader) - 1):
-                (x_mask_a, x_tokens_a, y_mask_a, y_tokens_a, input_tokens_a, target_tokens_a, mask_a) = next(train_iter)
-                (x_mask_b, x_tokens_b, y_mask_b, y_tokens_b, input_tokens_b, target_tokens_b, mask_b) = next(train_iter)
-
+            for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
                 print("CURRENT ITERATION: ", num_iters)
-                print("A", args.switch_time > 0, num_iters, int(args.iterations * args.switch_time))
+                # Get two sentences from y_tokens
+                print("y_tokens.shape", y_tokens.shape)
+                # TODO: Figure out a way to split on 13, find the index, and index all these variables at the indices
+                y_tokens_a = y_tokens[:, 0]
+                y_tokens_b = y_tokens[:, 1]
+                y_mask_a = y_mask[:, 0]
+                y_mask_b = y_mask[:, 1]
+                x_tokens_a = x_tokens[:, 0]
+                x_tokens_b = x_tokens[:, 1]
+                x_mask_a = x_mask[:, 0]
+                x_mask_b = x_mask[:, 1]
                 print("x_tokens_a", tokenizer.decode(x_tokens_a[0, :][x_mask_a[0, :] == 1].tolist()))
                 print("y_tokens_a", tokenizer.decode(y_tokens_a[0, :][y_mask_a[0, :] == 1].tolist()))
                 print("x_tokens_b", tokenizer.decode(x_tokens_b[0, :][x_mask_b[0, :] == 1].tolist()))
                 print("y_tokens_b", tokenizer.decode(y_tokens_b[0, :][y_mask_b[0, :] == 1].tolist()))
 
+                    # output_sentence_a_b = train_step(device, VAE, optimizer, )
+
+                # print("x_tokens_a", tokenizer.decode(x_tokens_a[0, :][x_mask_a[0, :] == 1].tolist()))
+                # print("y_tokens_a", tokenizer.decode(y_tokens_a[0, :][y_mask_a[0, :] == 1].tolist()))
+                # print("x_tokens_b", tokenizer.decode(x_tokens_b[0, :][x_mask_b[0, :] == 1].tolist()))
+                # print("y_tokens_b", tokenizer.decode(y_tokens_b[0, :][y_mask_b[0, :] == 1].tolist()))
+                break
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                 #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)

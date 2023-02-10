@@ -513,18 +513,19 @@ def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len,
         data_titles = os.path.join(data_dir, 'wikiPlots/titles')
         with open(data_plots, errors='ignore') as fp:
             plots_text = fp.readlines()
+            plots_text = [p.strip() for p in plots_text]
         with open(data_titles, errors='ignore') as ft:
             titles = ft.readlines()
 
         plots = []
         current_plot = ''
         for line in plots_text:
-            current_plot += line
+            current_plot += line.strip()
             if '<EOS>' in line:
                 plots.append(current_plot)
                 current_plot = ''
 
-        print('plots[0]', plots[0])
+        # print('plots[0]', plots[0])
 
         texts = [(t, p) for t, p in zip(titles, plots) if t.strip() != '' and p.strip() != '']
 
