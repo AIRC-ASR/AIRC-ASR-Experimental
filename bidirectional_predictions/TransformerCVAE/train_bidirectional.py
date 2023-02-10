@@ -17,10 +17,10 @@ from transformers.utils import logging
 logger = logging.get_logger("transformers")
 import copy
 
-from apex.optimizers import FusedAdam
+# from apex.optimizers import FusedAdam
 # from apex import amp
 from torch.cuda import amp
-from apex.fp16_utils import FP16_Optimizer
+# from apex.fp16_utils import FP16_Optimizer
 
 from data.util import *
 from util import *
@@ -36,6 +36,10 @@ from sklearn.manifold import TSNE
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
 
 devices = '0'
 os.environ["CUDA_VISIBLE_DEVICES"] = devices
@@ -284,8 +288,9 @@ def main():
 
     parser.add_argument('--learn_prior', action="store_true")
 
-    args = parser.parse_args('test --batch-sizes 1 --seq-lens 1024 '
-                             '--add_input --learn_prior --fp16'.split()) # wi.12.proj_vary_beta_cvae
+    # NOTE: Use for changing the arguments of the program
+    args = parser.parse_args('test --batch-sizes 1 1 --seq-lens 1024 1024 '
+                             '--add_input --learn_prior --fp16 --iterations 10 --switch-time 0.1'.split()) # wi.12.proj_vary_beta_cvae
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -386,7 +391,7 @@ def main():
     batch_schedule = list(zip(map(int, args.batch_sizes), map(int, args.seq_lens)))
     assert len(batch_schedule) <= 2, 'Currently not supporting multiple schedule'
     cur_b_schedule = len(batch_schedule) - 1 if args.switch_time == 0 else 0
-    print('Batch schedule', batch_schedule)
+    print('Batch schedule', batch_schedule, cur_b_schedule, args.seq_lens)
     train_loader, val_loader, test_loader = prepare_dataset(
         args.data_dir, args.dataset, tokenizer,
         batch_schedule[cur_b_schedule][0], batch_schedule[cur_b_schedule][1],
@@ -402,6 +407,7 @@ def main():
     ###
 
     print('Wrapping models and optimizers...')
+
     # Apply linear scaling rule to increase batch size for short sequence training.
     lr_schedule = switch_schedule(linear_schedule(args), batch_schedule[cur_b_schedule][0] / batch_schedule[-1][0],
                                   int(args.iterations * args.switch_time))
@@ -778,12 +784,22 @@ def main():
         logger.info("Training loop.       Batches: %d" % len(train_loader))
 
         # train_iter = iter(train_loader); x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask = next(train_iter)
+        train_iter = iter(train_loader)
         with tqdm(total=len(train_loader)) as pbar:
-            for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
+            for i in range(len(train_loader) - 1):
+                (x_mask_a, x_tokens_a, y_mask_a, y_tokens_a, input_tokens_a, target_tokens_a, mask_a) = next(train_iter)
+                (x_mask_b, x_tokens_b, y_mask_b, y_tokens_b, input_tokens_b, target_tokens_b, mask_b) = next(train_iter)
+
+                print("CURRENT ITERATION: ", num_iters)
+                print("A", args.switch_time > 0, num_iters, int(args.iterations * args.switch_time))
+                print("x_tokens_a", tokenizer.decode(x_tokens_a[0, :][x_mask_a[0, :] == 1].tolist()))
+                print("y_tokens_a", tokenizer.decode(y_tokens_a[0, :][y_mask_a[0, :] == 1].tolist()))
+                print("x_tokens_b", tokenizer.decode(x_tokens_b[0, :][x_mask_b[0, :] == 1].tolist()))
+                print("y_tokens_b", tokenizer.decode(y_tokens_b[0, :][y_mask_b[0, :] == 1].tolist()))
+
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                 #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
-                # print("y_tokens", y_tokens)
 
                 if not tuning_all and num_iters >= tuning_all_after_iters:
                     for name, parameter in VAE.named_parameters():
@@ -792,40 +808,35 @@ def main():
                     tuning_all = True
 
                 # This computes a training step going from input to output and computes the losses
-                output_forward = train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-                                    input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
+                # NORMAL LOSS, Prompt -> Story
+                output_forward = train_step(device, VAE, optimizer, x_mask_a, x_tokens_a, y_mask_a, y_tokens_a,
+                        input_tokens_a, target_tokens_a, mask_a, loss_fn, beta, args.model_type)
                 loss_forward, ce_loss_forward, kl_loss_forward = output_forward[-1]
 
-                # This computes a training step going from output to input and computes the losses                
-                output_prompt_backward = find_loss_bidirectional("prompt", device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
-                                    target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)
-                loss_prompt_backward, ce_prompt_loss_backward, kl_prompt_loss_backward = output_prompt_backward[-1]
-                
-                # TODO: Each sentence is independently mapped to a title. Find the EOS tag
-                # TODO: Loop through two items at a time for this loop on line 782
-                # TODO: Compute the loss in both directions and add them together
-                # TODO: For previous sentences, keep another list that keeps track of all previous sentences seen
-                # TODO: Also keep track of the previous titles
-                # TODO: Use the previous sentences to predict the current one
-                    # TODO: Possibly do the same for the titles
-                # split_sentences = split_tokenized_sentences(y_tokens[0])
-                # print("split_sentences", split_sentences)
+                # # SENTENCE LEVEL LOSS, Sentence A -> Sentence B
+                # output_sentence_a_b = train_step(device, VAE, optimizer, x_mask_a, x_tokens_a, y_mask_b, y_tokens_b,
+                #         input_tokens_a, target_tokens_b, mask_a, loss_fn, beta, args.model_type)
+                # loss_sentence_a_b, ce_loss_sentence_a_b, kl_loss_sentence_a_b = output_sentence_a_b[-1]
 
-                # # TODO: Move into find_loss_bidirectional()
-                # for i in range(len(split_sentences) - 1):
-                #     sentence_a, sentence_b = split_sentences[i], split_sentences[i + 1]
-                #     # TODO:Configure calls to train_step_properly
-                #     train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-                #                     input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
+                # # SENTENCE LEVEL LOSS, Sentence B -> Sentence A
+                # output_sentence_b_a = train_step(device, VAE, optimizer, x_mask_b, x_tokens_b, y_mask_a, y_tokens_a,
+                #         input_tokens_b, target_tokens_a, mask_b, loss_fn, beta, args.model_type)
+                # loss_sentence_b_a, ce_loss_sentence_b_a, kl_loss_sentence_b_a = output_sentence_b_a[-1]
 
-                # # output_previous_sentence_backward = find_loss_bidirectional("previous_sentences", device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-                # #                     input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
-                # # loss_previous_sentence_backward, ce_previous_sentence_loss_backward, kl_previous_sentence_loss_backward = output_previous_sentence_backward[-1]
+                # # SENTENCE TO PROMPT LEVEL LOSS, Sentence A -> Prompt A
+                # output_sentence_a_prompt_a = train_step(device, VAE, optimizer, y_mask_a, y_tokens_a, x_mask_a, x_tokens_a,
+                #         target_tokens_a, input_tokens_a, mask_a, loss_fn, beta, args.model_type)
+                # loss_sentence_a_prompt_a, ce_loss_sentence_a_prompt_a, kl_loss_sentence_a_prompt_a = output_sentence_a_prompt_a[-1]
 
-                # This finds the overall loss by summing over the forward and backward loss
-                loss = loss_forward + loss_prompt_backward
-                ce_loss = ce_loss_forward + ce_prompt_loss_backward
-                kl_loss = kl_loss_forward + kl_prompt_loss_backward
+                # # This finds the overall loss by summing over the forward and sentence level losses
+                # loss = loss_forward + loss_sentence_a_b + loss_sentence_b_a
+                # ce_loss = ce_loss_forward + ce_loss_sentence_a_b + ce_loss_sentence_b_a
+                # kl_loss = kl_loss_forward + kl_loss_sentence_a_b + kl_loss_sentence_b_a
+
+                loss = loss_forward
+                ce_loss = ce_loss_forward
+                kl_loss = kl_loss_forward
+
 
                 lr = scheduler.get_last_lr()[0]
                 # Log to Tensorboard
@@ -871,6 +882,7 @@ def main():
                 if args.switch_time > 0 and num_iters == int(args.iterations * args.switch_time):
                     print('Switch to long sequence training')
                     logger.info("Switch to long sequence training")
+                    # TODO: Figure out why this causes an index error
                     cur_b_schedule += 1
                     train_loader, val_loader, test_loader = prepare_dataset(
                         args.data_dir, args.dataset, tokenizer,
@@ -880,6 +892,8 @@ def main():
                         make_test=True,
                         num_workers=args.workers, data_type=args.data_type
                     )
+
+
         if not end:
             e += 1
             logger.info("Training loop. The ith epoch completed: %d" % e)
