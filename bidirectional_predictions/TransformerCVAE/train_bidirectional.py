@@ -783,7 +783,7 @@ def main():
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                 #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
-                print("y_tokens", y_tokens)
+                # print("y_tokens", y_tokens)
 
                 if not tuning_all and num_iters >= tuning_all_after_iters:
                     for name, parameter in VAE.named_parameters():
@@ -801,19 +801,26 @@ def main():
                                     target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)
                 loss_prompt_backward, ce_prompt_loss_backward, kl_prompt_loss_backward = output_prompt_backward[-1]
                 
-                split_sentences = split_tokenized_sentences(y_tokens[0])
-                print("split_sentences", split_sentences)
+                # TODO: Each sentence is independently mapped to a title. Find the EOS tag
+                # TODO: Loop through two items at a time for this loop on line 782
+                # TODO: Compute the loss in both directions and add them together
+                # TODO: For previous sentences, keep another list that keeps track of all previous sentences seen
+                # TODO: Also keep track of the previous titles
+                # TODO: Use the previous sentences to predict the current one
+                    # TODO: Possibly do the same for the titles
+                # split_sentences = split_tokenized_sentences(y_tokens[0])
+                # print("split_sentences", split_sentences)
 
-                # TODO: Move into find_loss_bidirectional()
-                for i in range(len(split_sentences) - 1):
-                    sentence_a, sentence_b = split_sentences[i], split_sentences[i + 1]
-                    # TODO:Configure calls to train_step_properly
-                    train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-                                    input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
-
-                # output_previous_sentence_backward = find_loss_bidirectional("previous_sentences", device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+                # # TODO: Move into find_loss_bidirectional()
+                # for i in range(len(split_sentences) - 1):
+                #     sentence_a, sentence_b = split_sentences[i], split_sentences[i + 1]
+                #     # TODO:Configure calls to train_step_properly
+                #     train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
                 #                     input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
-                # loss_previous_sentence_backward, ce_previous_sentence_loss_backward, kl_previous_sentence_loss_backward = output_previous_sentence_backward[-1]
+
+                # # output_previous_sentence_backward = find_loss_bidirectional("previous_sentences", device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+                # #                     input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
+                # # loss_previous_sentence_backward, ce_previous_sentence_loss_backward, kl_previous_sentence_loss_backward = output_previous_sentence_backward[-1]
 
                 # This finds the overall loss by summing over the forward and backward loss
                 loss = loss_forward + loss_prompt_backward

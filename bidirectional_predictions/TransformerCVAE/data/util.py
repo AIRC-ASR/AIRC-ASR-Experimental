@@ -512,6 +512,7 @@ def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len,
 
         texts = [(t, p) for t, p in zip(titles, plots) if t.strip() != '' and p.strip() != '']
         print('Done.')
+        print('texts',texts)
         train_text = texts[:int(len(texts) * 0.9)]
         val_text = texts[int(len(texts) * 0.9):int(len(texts) * 0.95)]
         test_text = texts[int(len(texts) * 0.95):]
