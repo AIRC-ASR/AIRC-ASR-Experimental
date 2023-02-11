@@ -792,13 +792,24 @@ def main():
                 y_tokens_text = tokenizer.decode(y_tokens[0].tolist())
                 y_sentences = y_tokens_text.split('.')
 
+                y_mask_text = tokenizer.decode(y_mask[0].tolist())
+
                 split_indices = []
                 print('y_tokens shape', y_tokens.shape)
                 print('y_mask shape', y_mask.shape)
-                total_len = 0
-                for idx, y_sentence in enumerate(y_sentences):
-                    print('y_sentence LEN',  y_tokens_text[total_len:total_len + len(y_sentence) + 1])
-                    total_len += len(y_sentence) + 1
+                torch.set_printoptions(threshold=10000)
+
+                print('y_mask', y_mask[0])
+                for y_sentence in y_sentences:
+                    # print('y_sentence',  y_tokens_text[total_len:total_len + len(y_sentence) + 1])
+                    y_sentence_encoded = tokenizer.encode(y_sentence + '.')
+                    print('y_sentence_encoded', y_sentence_encoded)
+                    # y_sentence_decoded = tokenizer.decode(y_sentence_encoded)
+                    # print('y_sentence_decoded', y_sentence_decoded)
+                    y_mask_a = torch.ones(len(y_sentence_encoded), dtype=torch.long).to(device)
+                    print('y_mask_a', y_mask_a)
+                    print('LEN', len(y_sentence_encoded), len(y_mask_a))
+                    assert(len(y_sentence_encoded) == len(y_mask_a))
                 break
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
