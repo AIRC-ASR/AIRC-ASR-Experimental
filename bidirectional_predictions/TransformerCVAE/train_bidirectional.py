@@ -788,23 +788,44 @@ def main():
         with tqdm(total=len(train_loader)) as pbar:
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
                 print("CURRENT ITERATION: ", num_iters)
-                # Get two sentences from y_tokens
-                # TODO: Figure out a way to split on 13, find the index, and index all these variables at the indices
-                print("y_tokens", y_tokens)
-                print("y_tokens.shape", y_tokens.shape)
-                print('ABB', y_tokens[0])
-                y_indices_a = (y_tokens[0] == 13).nonzero().flatten()
-                print('y_indices_a', y_indices_a)
-                y_tokens_a = torch.tensor_split(y_tokens[0], y_indices_a.tolist())
-                print('y_tokens_a', y_tokens_a)
-                print('y_tokens_a[0], y_tokens_a[0])', y_tokens_a[0], y_tokens_a[1])
-                print('y_sentences_a', tokenizer.decode(y_tokens_a[0].tolist()), tokenizer.decode(y_tokens_a[1].tolist()))
-                # y_indices_a = (y_tokens == 13).nonzero()
-                # y_tokens_a = torch.tensor_split(y_tokens)
-                # print("y_indices_a", y_indices_a)
-                # print("y_tokens_a", y_tokens_a)
+                # # Get two sentences from y_tokens
+                # # TODO: Figure out a way to split on 13, find the index, and index all these variables at the indices
+                # print("y_tokens", y_tokens)
+                # print("y_tokens.shape", y_tokens.shape)
+                # print('ABB', y_tokens[0])
+                # y_indices_a = (y_tokens[0] == 13).nonzero().flatten()
+                # print('y_indices_a', y_indices_a)
+                # y_tokens_a = torch.tensor_split(y_tokens[0], y_indices_a.tolist())
+                # print('y_tokens_a', y_tokens_a)
+                # print('y_tokens_a[0], y_tokens_a[0])', y_tokens_a[0], y_tokens_a[1])
+                # print('y_sentences_a', tokenizer.decode(y_tokens_a[0].tolist()), tokenizer.decode(y_tokens_a[1].tolist()))
+                # # y_indices_a = (y_tokens == 13).nonzero()
+                # # y_tokens_a = torch.tensor_split(y_tokens)
+                # # print("y_indices_a", y_indices_a)
+                # # print("y_tokens_a", y_tokens_a)
 
-                    # output_sentence_a_b = train_step(device, VAE, optimizer, )
+                #     # output_sentence_a_b = train_step(device, VAE, optimizer, )
+
+                y_tokens_text = tokenizer.decode(y_tokens[0].tolist())
+                print('y_tokens_text', y_tokens_text)
+                y_sentences = y_tokens_text.split('.')
+                print('y_sentences', y_sentences)
+
+                split_indices = []
+                for idx, y_sentence in enumerate(y_sentences):
+                    print('y_sentence LEN', y_sentence, len(y_sentence))
+                    if idx == 0:
+                        split_indices.append(len(y_sentence))
+                    else:
+                        split_indices.append(split_indices[idx - 1] + len(y_sentence) + 1)
+
+                print('split_indices', split_indices)
+                y_tokens_sentences = torch.tensor_split(y_tokens[0], split_indices)
+                print('y_tokens_sentences', y_tokens_sentences)
+                y_tokens_sentences_text = [tokenizer.decode(y_tokens_sentence.tolist()) for y_tokens_sentence in y_tokens_sentences]
+                # print('y_tokens_sentences_text', y_tokens_sentences_text)
+                for y_tokens_sentence_text in y_tokens_sentences_text:
+                    print('y_tokens_sentence_text', y_tokens_sentence_text)
 
                 # print("x_tokens_a", tokenizer.decode(x_tokens_a[0, :][x_mask_a[0, :] == 1].tolist()))
                 # print("y_tokens_a", tokenizer.decode(y_tokens_a[0, :][y_mask_a[0, :] == 1].tolist()))
