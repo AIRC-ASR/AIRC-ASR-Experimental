@@ -878,6 +878,7 @@ def main():
 
                     print('loss_sentence_a_b', loss_sentence_a_b)
 
+                break
 
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
@@ -895,9 +896,9 @@ def main():
                         input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
                 loss_forward, ce_loss_forward, kl_loss_forward = output_forward[-1]
 
-                loss = loss_forward + loss_sentence_b_a + loss_sentence_a_b
-                ce_loss = ce_loss_forward + ce_loss_sentence_b_a + ce_loss_sentence_a_b
-                kl_loss = kl_loss_forward + kl_loss_sentence_b_a + kl_loss_sentence_a_b
+                loss = loss_forward + loss_sentence_b_a + total_loss_sentence_a_b
+                ce_loss = ce_loss_forward + ce_loss_sentence_b_a + total_ce_loss_sentence_a_b
+                kl_loss = kl_loss_forward + kl_loss_sentence_b_a + total_kl_loss_sentence_a_b
 
                 lr = scheduler.get_last_lr()[0]
                 # Log to Tensorboard
