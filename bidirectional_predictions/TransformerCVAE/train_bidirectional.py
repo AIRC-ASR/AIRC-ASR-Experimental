@@ -788,29 +788,97 @@ def main():
         with tqdm(total=len(train_loader)) as pbar:
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
                 print("CURRENT ITERATION: ", num_iters)
-
-                y_tokens_text = tokenizer.decode(y_tokens[0].tolist())
-                y_sentences = y_tokens_text.split('.')
-
-                y_mask_text = tokenizer.decode(y_mask[0].tolist())
-
-                split_indices = []
-                print('y_tokens shape', y_tokens.shape)
-                print('y_mask shape', y_mask.shape)
                 torch.set_printoptions(threshold=10000)
 
-                print('y_mask', y_mask[0])
+                # NOTE: This is the bidirectional running of the program
+                y_sentences_encodings = []
+                y_sentence_masks = []
+                y_tokens_text = tokenizer.decode(y_tokens[0, :][y_mask[0, :] == 1].tolist())
+                y_sentences = y_tokens_text.split('.')
                 for y_sentence in y_sentences:
-                    # print('y_sentence',  y_tokens_text[total_len:total_len + len(y_sentence) + 1])
-                    y_sentence_encoded = tokenizer.encode(y_sentence + '.')
-                    print('y_sentence_encoded', y_sentence_encoded)
-                    # y_sentence_decoded = tokenizer.decode(y_sentence_encoded)
-                    # print('y_sentence_decoded', y_sentence_decoded)
-                    y_mask_a = torch.ones(len(y_sentence_encoded), dtype=torch.long).to(device)
-                    print('y_mask_a', y_mask_a)
-                    print('LEN', len(y_sentence_encoded), len(y_mask_a))
-                    assert(len(y_sentence_encoded) == len(y_mask_a))
-                break
+                    y_sentence_encoding = tokenizer.encode(y_sentence + '.')
+                    y_sentence_mask = [1] * len(y_sentence_encoding)
+                    assert(len(y_sentence_encoding) == len(y_sentence_mask))
+
+                    y_sentences_encodings.append(y_sentence_encoding)
+                    y_sentence_masks.append(y_sentence_mask)
+
+                # print("Y SENTENCES ENCODINGS: ", y_sentences_encodings)
+                # print("Y SENTENCE MASKS: ", y_sentence_masks)
+
+                print('input_tokens.shape', input_tokens.shape)
+                print('input_tokens', input_tokens)
+                print('target_tokens.shape', target_tokens.shape)
+                print('target_tokens', target_tokens)
+
+                assert(len(y_sentences_encodings) == len(y_sentence_masks))
+                total_loss_sentence_b_a = 0
+                total_loss_sentence_a_b = 0
+                total_ce_loss_sentence_b_a = 0
+                total_ce_loss_sentence_a_b = 0
+                total_kl_loss_sentence_b_a = 0
+                total_kl_loss_sentence_a_b = 0
+                for idx in range(len(y_sentences_encodings) - 1):
+                    y_sentence_encoding_a = y_sentences_encodings[idx]
+                    y_sentence_mask_a = y_sentence_masks[idx]
+
+                    y_sentence_encoding_b = y_sentences_encodings[idx + 1]
+                    y_sentence_mask_b = y_sentence_masks[idx + 1]
+
+                    if len(y_sentence_encoding_a) < 1023:
+                        padding_list = [0] * (1023 - len(y_sentence_encoding_a))
+                        y_sentence_encoding_a = y_sentence_encoding_a + padding_list
+
+                    if len(y_sentence_mask_a) < 1023:
+                        padding_list = [0] * (1023 - len(y_sentence_mask_a))
+                        y_sentence_mask_a = y_sentence_mask_a + padding_list
+
+                    if len(y_sentence_encoding_b) < 1023:
+                        padding_list = [0] * (1023 - len(y_sentence_encoding_b))
+                        y_sentence_encoding_b = y_sentence_encoding_b + padding_list
+
+                    if len(y_sentence_mask_b) < 1023:
+                        padding_list = [0] * (1023 - len(y_sentence_mask_b))
+                        y_sentence_mask_b = y_sentence_mask_b + padding_list
+
+                    y_sentence_encoding_a = torch.tensor(y_sentence_encoding_a, dtype=torch.long).to(device)
+                    y_sentence_mask_a = torch.tensor(y_sentence_mask_a, dtype=torch.long).to(device)
+                    y_sentence_encoding_b = torch.tensor(y_sentence_encoding_b, dtype=torch.long).to(device)
+                    y_sentence_mask_b = torch.tensor(y_sentence_mask_b, dtype=torch.long).to(device)
+
+                    y_sentence_encoding_a = y_sentence_encoding_a.unsqueeze(0)
+                    y_sentence_mask_a = y_sentence_mask_a.unsqueeze(0)
+                    y_sentence_encoding_b = y_sentence_encoding_b.unsqueeze(0)
+                    y_sentence_mask_b = y_sentence_mask_b.unsqueeze(0)
+
+                    print("Y SENTENCE ENCODING A: ", y_sentence_encoding_a.shape)
+                    print("Y SENTENCE MASK A: ", y_sentence_mask_a.shape)
+                    print("Y SENTENCE ENCODING B: ", y_sentence_encoding_b.shape)
+                    print("Y SENTENCE MASK B: ", y_sentence_mask_b.shape)
+
+                    # SENTENCE LEVEL LOSS, Sentence B -> Sentence A
+                    output_sentence_b_a = train_step(device, VAE, optimizer, y_sentence_encoding_b, y_sentence_mask_b, y_sentence_encoding_a, y_sentence_mask_a,
+                            y_sentence_encoding_b, y_sentence_encoding_a, mask, loss_fn, beta, args.model_type)
+                    loss_sentence_b_a, ce_loss_sentence_b_a, kl_loss_sentence_b_a = output_sentence_b_a[-1]
+
+                    total_loss_sentence_b_a += loss_sentence_b_a
+                    total_ce_loss_sentence_b_a += ce_loss_sentence_b_a
+                    total_kl_loss_sentence_b_a += kl_loss_sentence_b_a
+
+                    print('loss_sentence_b_a', loss_sentence_b_a)
+
+                    # # SENTENCE LEVEL LOSS, Sentence A -> Sentence B
+                    output_sentence_a_b = train_step(device, VAE, optimizer, y_sentence_encoding_a, y_sentence_mask_a, y_sentence_encoding_b, y_sentence_mask_b,
+                            y_sentence_encoding_a, y_sentence_encoding_b, mask, loss_fn, beta, args.model_type)
+                    loss_sentence_a_b, ce_loss_sentence_a_b, kl_loss_sentence_a_b = output_sentence_a_b[-1]
+
+                    total_loss_sentence_a_b += loss_sentence_a_b
+                    total_ce_loss_sentence_a_b += ce_loss_sentence_a_b
+                    total_kl_loss_sentence_a_b += kl_loss_sentence_a_b
+
+                    print('loss_sentence_a_b', loss_sentence_a_b)
+
+
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                 #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
@@ -823,34 +891,13 @@ def main():
 
                 # This computes a training step going from input to output and computes the losses
                 # NORMAL LOSS, Prompt -> Story
-                output_forward = train_step(device, VAE, optimizer, x_mask_a, x_tokens_a, y_mask_a, y_tokens_a,
-                        input_tokens_a, target_tokens_a, mask_a, loss_fn, beta, args.model_type)
+                output_forward = train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+                        input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
                 loss_forward, ce_loss_forward, kl_loss_forward = output_forward[-1]
 
-                # # SENTENCE LEVEL LOSS, Sentence A -> Sentence B
-                # output_sentence_a_b = train_step(device, VAE, optimizer, x_mask_a, x_tokens_a, y_mask_b, y_tokens_b,
-                #         input_tokens_a, target_tokens_b, mask_a, loss_fn, beta, args.model_type)
-                # loss_sentence_a_b, ce_loss_sentence_a_b, kl_loss_sentence_a_b = output_sentence_a_b[-1]
-
-                # # SENTENCE LEVEL LOSS, Sentence B -> Sentence A
-                # output_sentence_b_a = train_step(device, VAE, optimizer, x_mask_b, x_tokens_b, y_mask_a, y_tokens_a,
-                #         input_tokens_b, target_tokens_a, mask_b, loss_fn, beta, args.model_type)
-                # loss_sentence_b_a, ce_loss_sentence_b_a, kl_loss_sentence_b_a = output_sentence_b_a[-1]
-
-                # # SENTENCE TO PROMPT LEVEL LOSS, Sentence A -> Prompt A
-                # output_sentence_a_prompt_a = train_step(device, VAE, optimizer, y_mask_a, y_tokens_a, x_mask_a, x_tokens_a,
-                #         target_tokens_a, input_tokens_a, mask_a, loss_fn, beta, args.model_type)
-                # loss_sentence_a_prompt_a, ce_loss_sentence_a_prompt_a, kl_loss_sentence_a_prompt_a = output_sentence_a_prompt_a[-1]
-
-                # # This finds the overall loss by summing over the forward and sentence level losses
-                # loss = loss_forward + loss_sentence_a_b + loss_sentence_b_a
-                # ce_loss = ce_loss_forward + ce_loss_sentence_a_b + ce_loss_sentence_b_a
-                # kl_loss = kl_loss_forward + kl_loss_sentence_a_b + kl_loss_sentence_b_a
-
-                loss = loss_forward
-                ce_loss = ce_loss_forward
-                kl_loss = kl_loss_forward
-
+                loss = loss_forward + loss_sentence_b_a + loss_sentence_a_b
+                ce_loss = ce_loss_forward + ce_loss_sentence_b_a + ce_loss_sentence_a_b
+                kl_loss = kl_loss_forward + kl_loss_sentence_b_a + kl_loss_sentence_a_b
 
                 lr = scheduler.get_last_lr()[0]
                 # Log to Tensorboard
