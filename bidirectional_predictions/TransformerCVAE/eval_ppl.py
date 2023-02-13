@@ -15,7 +15,7 @@ import copy
 from data.util import *
 from util import *
 
-from model import *
+from model import VAEModel, Conv1D
 
 
 def compute_loss(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta):
@@ -142,6 +142,7 @@ def run_model():
     gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir=cache_dir)
     print('gpt2_params:', num_params(gpt2_model))  # gpt2: 124439808
     config = GPT2Config()
+    config.n_ctx = 1024
 
     # add special tokens
     special_tokens_dict = {
