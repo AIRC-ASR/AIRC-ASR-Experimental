@@ -17,10 +17,10 @@ from transformers.utils import logging
 logger = logging.get_logger("transformers")
 import copy
 
-from apex.optimizers import FusedAdam
+# from apex.optimizers import FusedAdam
 # from apex import amp
 from torch.cuda import amp
-from apex.fp16_utils import FP16_Optimizer
+# from apex.fp16_utils import FP16_Optimizer
 
 from data.util import *
 from util import *
