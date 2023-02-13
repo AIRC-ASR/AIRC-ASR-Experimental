@@ -47,14 +47,19 @@ class Preprocessor_base():
             if self.fn is None:
                 self.fn = self.make_fn()
             x = self.fn(x)
+
             return x
         except Exception as e:
             print('Error in preprocessing', repr(e))
             raise e
 
 
-def encode_tuple(tokenizer, t):
-    return tokenizer.encode(t[0]), tokenizer.encode(t[1]), tokenizer.encode(t[2])
+def encode_tuple(tokenizer, t, max_length=1024, truncation=True):
+    return (
+        tokenizer.encode(t[0], max_length=max_length, truncation=truncation),
+        tokenizer.encode(t[1], max_length=max_length, truncation=truncation),
+        tokenizer.encode(t[2], max_length=max_length, truncation=truncation)
+    )
 
 
 def truncate_tuple(truncator, t):
@@ -271,6 +276,7 @@ def extract_keywords(text, r):
 
 
 def insert_keywords(tokenizer, data_type):
+    # NOTE: Declares how all the types work
     def f(text_raw_dict):
         # 'prompt' in text_raw_dict --> wp dataset; 'title' in text_raw_dict --> wi dataset and other well preprocessed dataset
         summary = text_raw_dict['prompt'] if 'prompt' in text_raw_dict else text_raw_dict['title']
@@ -506,12 +512,25 @@ def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len,
         data_plots = os.path.join(data_dir, 'wikiPlots/plots_paragraph')
         data_titles = os.path.join(data_dir, 'wikiPlots/titles')
         with open(data_plots, errors='ignore') as fp:
-            plots = fp.readlines()
+            plots_text = fp.readlines()
+            plots_text = [p.strip() for p in plots_text]
         with open(data_titles, errors='ignore') as ft:
             titles = ft.readlines()
 
+        plots = []
+        current_plot = ''
+        for line in plots_text:
+            current_plot += line.strip()
+            if '<EOS>' in line:
+                plots.append(current_plot)
+                current_plot = ''
+
+        # print('plots[0]', plots[0])
+
         texts = [(t, p) for t, p in zip(titles, plots) if t.strip() != '' and p.strip() != '']
+
         print('Done.')
+
         train_text = texts[:int(len(texts) * 0.9)]
         val_text = texts[int(len(texts) * 0.9):int(len(texts) * 0.95)]
         test_text = texts[int(len(texts) * 0.95):]
