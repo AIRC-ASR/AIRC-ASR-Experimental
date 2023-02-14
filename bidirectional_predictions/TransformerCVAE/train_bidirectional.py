@@ -739,6 +739,7 @@ def main():
             y_sentence_encoding = y_sentences_encodings[idx]
             y_sentence_mask = y_sentence_masks[idx]
 
+
             if len(y_sentence_encoding) < min(batch_schedule[cur_b_schedule][1], input_tokens.shape[1]):
                 padding_list = [0] * (min(batch_schedule[cur_b_schedule][1], input_tokens.shape[1] - len(y_sentence_encoding)))
                 y_sentence_encoding = y_sentence_encoding + padding_list
@@ -756,14 +757,16 @@ def main():
             previous_sentences_encodings_tensor = torch.tensor(previous_sentences_encodings, dtype=torch.long).to(device)
             previous_sentences_masks_tensor = torch.tensor(previous_sentences_masks, dtype=torch.long).to(device)
             print('y_sentence_encoding.shape', y_sentence_encoding.shape)
-            # SENTENCE LEVEL LOSS, Sentence B -> All Previous Sentences
-            output_all_previous_sentences = train_step(device, VAE, optimizer, y_sentence_encoding, y_sentence_mask, previous_sentences_encodings_tensor, previous_sentences_masks_tensor,
-                    y_sentence_encoding, previous_sentences_encodings_tensor, mask, loss_fn, beta, model_type)
-            loss_all_previous_sentences, ce_loss_all_previous_sentences, kl_loss_sentence_all_previous_sentences = output_all_previous_sentences[-1]
-            print('loss_all_previous_sentences', loss_all_previous_sentences)
-            total_loss_all_previous_sentences += loss_all_previous_sentences
-            total_ce_loss_all_previous_sentences += ce_loss_all_previous_sentences
-            total_kl_loss_sentence_all_previous_sentences += kl_loss_sentence_all_previous_sentences
+
+            if idx > 0:
+                # SENTENCE LEVEL LOSS, Sentence B -> All Previous Sentences
+                output_all_previous_sentences = train_step(device, VAE, optimizer, y_sentence_encoding, y_sentence_mask, previous_sentences_encodings_tensor, previous_sentences_masks_tensor,
+                        y_sentence_encoding, previous_sentences_encodings_tensor, mask, loss_fn, beta, model_type)
+                loss_all_previous_sentences, ce_loss_all_previous_sentences, kl_loss_sentence_all_previous_sentences = output_all_previous_sentences[-1]
+                print('loss_all_previous_sentences', loss_all_previous_sentences)
+                total_loss_all_previous_sentences += loss_all_previous_sentences
+                total_ce_loss_all_previous_sentences += ce_loss_all_previous_sentences
+                total_kl_loss_sentence_all_previous_sentences += kl_loss_sentence_all_previous_sentences
 
             previous_sentences_encodings.append(y_sentence_encoding)
             previous_sentences_masks.append(y_sentence_mask)
