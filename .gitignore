@@ -6,3 +6,4 @@ bidirectional_predictions/TransformerCVAE/data/__pycache__
 bidirectional_predictions/TransformerCVAE/__pycache__
 bidirectional_predictions/TransformerCVAE/out/*
 bidirectional_predictions/TransformerCVAE/data/wikiPlots
+bidirectional_predictions/TransformerCVAE/data/writingPrompts
