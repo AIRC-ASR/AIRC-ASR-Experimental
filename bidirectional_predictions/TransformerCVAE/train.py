@@ -37,6 +37,10 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
+
 devices = '0'
 os.environ["CUDA_VISIBLE_DEVICES"] = devices
 
@@ -284,6 +288,7 @@ def main():
 
     parser.add_argument('--learn_prior', action="store_true")
 
+    # NOTE: Use for changing arguments in the program
     args = parser.parse_args('test --batch-sizes 1 --seq-lens 1024 '
                              '--add_input --learn_prior --fp16'.split()) # wi.12.proj_vary_beta_cvae
 
@@ -817,6 +822,7 @@ def main():
                 if args.switch_time > 0 and num_iters == int(args.iterations * args.switch_time):
                     print('Switch to long sequence training')
                     logger.info("Switch to long sequence training")
+                    # TODO: Figure out why this causes an index error
                     cur_b_schedule += 1
                     train_loader, val_loader, test_loader = prepare_dataset(
                         args.data_dir, args.dataset, tokenizer,
