@@ -988,12 +988,14 @@ def main():
                     t_writer.add_scalar('ae_kl', kl_loss, num_iters)
 
                 st = time.time()
-                end = num_iters >= args.iterations
 
                 if args.warmup != -1:
                     scheduler.step()
+                
+                end = num_iters >= args.iterations
+                if end:
+                    break
 
-                if end: break
                 num_iters += 1
                 pbar.update(1)
 

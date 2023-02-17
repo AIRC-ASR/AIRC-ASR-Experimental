@@ -101,7 +101,7 @@ def run_model():
 
     parser.add_argument('--learn_prior', action="store_true")
 
-    args = parser.parse_args('--model-path out/wi.2.proj_beta_half_ae/model_0150000.pt '
+    args = parser.parse_args('--model-path out/test/model_0000000.pt '
                              '--add_attn --learn_prior --fp16'.split())
     print(args)
 
