@@ -142,7 +142,7 @@ def main():
     parser.add_argument('--long_seq_len', type=int, default=1024)
 
     # NOTE: Use for changing the arguments of the program
-    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 10 --switch-time 0.5 '
+    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
                              '--train_batch_size 2 --val_batch_size 1 --test_batch_size 8 '
                              '--short_seq_len 512 --long_seq_len 1024 '.split()) # wi.12.proj_vary_beta_cvae
 
@@ -622,8 +622,8 @@ def main():
         train_iter = iter(train_loader)
         with tqdm(total=len(train_loader)) as pbar:
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
-                print("CURRENT ITERATION: ", num_iters, y_tokens.shape)
-                torch.set_printoptions(threshold=10000)
+                if num_iters % 100 == 0:
+                    print("CURRENT ITERATION: ", num_iters)
 
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
@@ -653,7 +653,6 @@ def main():
                 all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, x_mask,
                     x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len)
                 (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_sentence_all_previous_sentences) = all_previous_sentences_loss_output
-                print('total_loss_all_previous_sentences total_ce_loss_all_previous_sentences total_kl_loss_sentence_all_previous_sentences', total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_sentence_all_previous_sentences)
 
                 # PROMPT LEVEL LOSS, Story -> Prompt
                 output_prompt_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
@@ -661,10 +660,12 @@ def main():
 
                 loss_prompt_backward, ce_loss_prompt_backward, kl_loss_prompt_backward = output_prompt_backward[-1]
 
+                # This finds the total loss for the next sentence, Sentence A -> Sentence B and Sentence B -> Sentence A
+                # And the total loss for all next sentences, Sentence A -> All Next Sentences
+                # And the total loss for all previous sentences, Sentence B -> All Previous Sentences
                 loss = loss_forward + total_loss_sentence_b_a + total_loss_sentence_a_b + loss_prompt_backward
                 ce_loss = ce_loss_forward + total_ce_loss_sentence_b_a + total_ce_loss_sentence_a_b + ce_loss_prompt_backward
                 kl_loss = kl_loss_forward + total_kl_loss_sentence_b_a + total_kl_loss_sentence_a_b + kl_loss_prompt_backward
-                print('REAL LOSS', loss)
 
                 lr = scheduler.get_last_lr()[0]
                 # Log to Tensorboard
