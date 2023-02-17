@@ -138,9 +138,14 @@ def main():
 
     parser.add_argument('--learn_prior', action="store_true")
 
+    parser.add_argument('--train_batch_size', type=int, default=1)
+    parser.add_argument('--val_batch_size', type=int, default=1)
+    parser.add_argument('--test_batch_size', type=int, default=1)
+
     # NOTE: Use for changing the arguments of the program
     args = parser.parse_args('test --batch-sizes 2 1 --seq-lens 512 1024 '
-                             '--add_input --learn_prior --fp16 --iterations 10 --switch-time 0.5'.split()) # wi.12.proj_vary_beta_cvae
+                             '--add_input --learn_prior --fp16 --iterations 10 --switch-time 0.5 '
+                             '--train_batch_size 2 --val_batch_size 1 --test_batch_size 2'.split()) # wi.12.proj_vary_beta_cvae
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -250,9 +255,9 @@ def main():
     print('Batch schedule', batch_schedule, cur_b_schedule, args.seq_lens)
     train_loader, val_loader, test_loader = prepare_dataset(
         args.data_dir, args.dataset, tokenizer,
-        batch_schedule[cur_b_schedule][0], batch_schedule[cur_b_schedule][1],
-        batch_schedule[-1][0], batch_schedule[-1][1],
-        batch_schedule[-1][0], batch_schedule[-1][1],
+        args.train_batch_size, batch_schedule[cur_b_schedule][1],
+        args.val_batch_size, batch_schedule[-1][1],
+        args.test_batch_size, batch_schedule[-1][1],
         make_test=True,
         num_workers=args.workers, data_type=args.data_type
     )
@@ -315,7 +320,6 @@ def main():
 
                 text = target_tokens[0, :].tolist()
                 logprob = ce_loss.tolist()
-                assert len(text) == len(logprob)
 
                 # only for story
                 idx = text.index(endoftext)
@@ -714,9 +718,9 @@ def main():
                     cur_b_schedule += 1
                     train_loader, val_loader, test_loader = prepare_dataset(
                         args.data_dir, args.dataset, tokenizer,
-                        batch_schedule[cur_b_schedule][0], batch_schedule[cur_b_schedule][1],
-                        batch_schedule[-1][0], batch_schedule[-1][1],
-                        batch_schedule[-1][0], batch_schedule[-1][1],
+                        args.train_batch_size, batch_schedule[cur_b_schedule][1],
+                        args.val_batch_size, batch_schedule[-1][1],
+                        args.test_batch_size, batch_schedule[-1][1],
                         make_test=True,
                         num_workers=args.workers, data_type=args.data_type
                     )
