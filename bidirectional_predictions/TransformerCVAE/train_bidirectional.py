@@ -143,8 +143,8 @@ def main():
 
     # NOTE: Use for changing the arguments of the program
     args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
-                             '--train_batch_size 2 --val_batch_size 1 --test_batch_size 8 '
-                             '--short_seq_len 512 --long_seq_len 1024 '.split()) # wi.12.proj_vary_beta_cvae
+                             '--train_batch_size 1 --val_batch_size 1 --test_batch_size 2 '
+                             '--short_seq_len 1024 --long_seq_len 1024 '.split()) # wi.12.proj_vary_beta_cvae
 
     if args.model_type == 'cvae':
         args.learn_prior = True
