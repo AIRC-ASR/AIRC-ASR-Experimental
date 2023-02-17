@@ -16,6 +16,9 @@ import importlib
 from transformers.utils import logging
 logger = logging.get_logger("transformers")
 import copy
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+
 
 # from apex.optimizers import FusedAdam
 # from apex import amp
@@ -625,16 +628,23 @@ def main():
         y_sentence_encodings = torch.zeros((batch_schedule[cur_b_schedule][0], len(y_sentences), batch_schedule[cur_b_schedule][1]), dtype=torch.long).to(device)
         y_sentence_masks = torch.zeros((batch_schedule[cur_b_schedule][0], len(y_sentences), batch_schedule[cur_b_schedule][1]), dtype=torch.long).to(device)
 
-        for batch_idx in range(batch_schedule[cur_b_schedule][0]):
-            for i, y_sentence in enumerate(y_sentences):
-                y_sentence_encoding = tokenizer.encode(y_sentence + '.')
-                y_sentence_mask = torch.ones(len(y_sentence_encoding), dtype=torch.long).to(device)
-                assert(len(y_sentence_encoding) == len(y_sentence_mask))
-
-                y_sentence_encodings[batch_idx, i, :len(y_sentence_encoding)] = torch.tensor(y_sentence_encoding)
-                y_sentence_masks[batch_idx, i, :len(y_sentence_mask)] = torch.tensor(y_sentence_mask)
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            partial_get_sentence_encoding_and_mask = partial(get_sentence_encoding_and_mask, tokenizer=tokenizer)
+            results = executor.map(partial_get_sentence_encoding_and_mask, y_sentences)
+            for i, result in enumerate(results):
+                y_sentence_encodings[:, i, :len(result[0])] = torch.tensor(result[0])
+                y_sentence_masks[:, i, :len(result[1])] = torch.tensor(result[1])
 
         return y_sentence_encodings, y_sentence_masks
+
+    def get_sentence_encoding_and_mask(sentence, tokenizer):
+        '''This function takes a sentence and returns the encoding and mask.'''
+        sentence_encoding = tokenizer.encode(sentence + '.')
+        sentence_mask = torch.ones(len(sentence_encoding), dtype=torch.long).to(device)
+        assert(len(sentence_encoding) == len(sentence_mask))
+
+        return sentence_encoding, sentence_mask
+
 
     def bidirectional_run(loss_type, device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
         target_tokens, input_tokens, mask, loss_fn, beta, model_type, tokenizer, batch_schedule, cur_b_schedule):
@@ -662,6 +672,38 @@ def main():
     def find_loss_bidirectional_two_sentences(y_sentence_encodings, y_sentence_masks, device,
         VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens, target_tokens, input_tokens, mask, loss_fn,
         beta, model_type, batch_schedule, cur_b_schedule):
+        total_loss_sentence_b_a = 0
+        total_loss_sentence_a_b = 0
+        total_ce_loss_sentence_b_a = 0
+        total_ce_loss_sentence_a_b = 0
+        total_kl_loss_sentence_b_a = 0
+        total_kl_loss_sentence_a_b = 0
+
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            # use a partial and map to run the function on all the sentences for all batches
+            partial_bidirectional_two_sentences = partial(bidirectional_two_sentences, device=device, VAE=VAE, optimizer=optimizer,
+                y_sentence_encodings=y_sentence_encodings, y_sentence_masks=y_sentence_masks, y_mask=y_mask, y_tokens=y_tokens, x_mask=x_mask, x_tokens=x_tokens,
+                target_tokens=target_tokens, input_tokens=input_tokens, mask=mask, loss_fn=loss_fn, beta=beta, model_type=model_type, batch_schedule=batch_schedule, cur_b_schedule=cur_b_schedule)
+            results = executor.map(partial_bidirectional_two_sentences, range(len(y_sentence_encodings)))
+            for result in results:
+                total_loss_sentence_b_a += result[0]
+                total_loss_sentence_a_b += result[1]
+                total_ce_loss_sentence_b_a += result[2]
+                total_ce_loss_sentence_a_b += result[3]
+                total_kl_loss_sentence_b_a += result[4]
+                total_kl_loss_sentence_a_b += result[5]
+
+        return (
+            total_loss_sentence_b_a,
+            total_loss_sentence_a_b,
+            total_ce_loss_sentence_b_a,
+            total_ce_loss_sentence_a_b,
+            total_kl_loss_sentence_b_a,
+            total_kl_loss_sentence_a_b
+        )
+
+    def bidirectional_two_sentences(idx, device, VAE, optimizer, y_sentence_encodings, y_sentence_masks, y_mask, y_tokens, x_mask, x_tokens,
+        target_tokens, input_tokens, mask, loss_fn, beta, model_type, batch_schedule, cur_b_schedule):
         total_loss_sentence_b_a = 0
         total_loss_sentence_a_b = 0
         total_ce_loss_sentence_b_a = 0
