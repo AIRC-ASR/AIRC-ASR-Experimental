@@ -1,29 +1,16 @@
-import os, time, gc, json, pickle, argparse, math
+import os, time, gc, argparse, math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.data as data
-from torch.nn import DataParallel
-import torch.distributed as dist
-import torch.multiprocessing as mp
 import numpy as np
-import transformers
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config, get_linear_schedule_with_warmup, Conv1D
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config, Conv1D
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
-import importlib
-# import logging
 from transformers.utils import logging
 logger = logging.get_logger("transformers")
 import copy
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-
-
-# from apex.optimizers import FusedAdam
-# from apex import amp
-from torch.cuda import amp
-# from apex.fp16_utils import FP16_Optimizer
 
 from data.util import *
 from util import *
@@ -41,168 +28,28 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import nltk
+
+from bi_training_core import compute_loss, compute_loss_ae, train_step, top_k_top_p_filtering, Device
+from bi_loss import bidirectional_loss
+
 nltk.download('punkt')
 nltk.download('stopwords')
+# devices = '0'
+# os.environ["CUDA_VISIBLE_DEVICES"] = devices
 
-devices = '0'
-os.environ["CUDA_VISIBLE_DEVICES"] = devices
-
-
-def compute_loss(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta):
-    input_tokens = input_tokens.to(device)
-    target_tokens = target_tokens.to(device)
-    mask = mask.to(device)
-    x_mask = x_mask.to(device)
-    x_tokens = x_tokens.to(device)
-    y_mask = y_mask.to(device)
-    y_tokens = y_tokens.to(device)
-
-    outputs = model(input_ids=input_tokens, attention_mask=mask, x_mask=x_mask, x_tokens=x_tokens, y_mask=y_mask,
-                    y_tokens=y_tokens)
-    logits = outputs[0]
-    kl_loss = outputs[-1]
-    num_logits = logits.size(-1)
-
-    # Perform masking
-    if mask is not None:
-        mask = mask.type(torch.bool)
-        mask = mask.to(device)
-        logits = logits.masked_select(mask.unsqueeze(-1))
-        target_tokens = target_tokens.masked_select(mask)
-
-    ce_loss = loss_fn(logits.view(-1, num_logits), target_tokens.view(-1))
-    kl_loss = kl_loss.mean()
-    loss = ce_loss.mean() + beta * kl_loss
-
-    return loss, ce_loss, kl_loss
-
-
-def compute_loss_ae(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta):
-    input_tokens = input_tokens.to(device)
-    target_tokens = target_tokens.to(device)
-    mask = mask.to(device)
-    x_mask = x_mask.to(device)
-    x_tokens = x_tokens.to(device)
-
-    outputs = model(input_ids=input_tokens, attention_mask=mask, y_mask=x_mask, y_tokens=x_tokens, from_mean=True, from_prior=False)
-
-    logits = outputs[0]
-    kl_loss = outputs[-1]
-    num_logits = logits.size(-1)
-
-    # Perform masking
-    if mask is not None:
-        mask = mask.type(torch.bool)
-        mask = mask.to(device)
-        logits = logits.masked_select(mask.unsqueeze(-1))
-        target_tokens = target_tokens.masked_select(mask)
-
-    ce_loss = loss_fn(logits.view(-1, num_logits), target_tokens.view(-1))
-    kl_loss = kl_loss.mean()
-    loss = ce_loss.mean()
-
-    return loss, ce_loss, kl_loss
-
-
-def train_step(device, model, optimizer, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta, model_type):
-    output = []
-    scaler = amp.GradScaler()
-    if model_type == 'ae_vae_fusion':
-        optimizer.zero_grad()
-        loss, ce_loss, kl_loss = compute_loss_ae(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tokens,
-                                              target_tokens, mask, loss_fn, beta)
-        scaler.scale(loss).backward()
-        # with amp.scale_loss(loss, optimizer) as scaled_loss:
-        #     scaled_loss.backward()
-        # torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 5.0)  # max_grad_norm=1.0
-        # loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # max_grad_norm=1.0
-        # optimizer.step()
-        scaler.step(optimizer)
-        scaler.update()
-        output.append((loss.item(), ce_loss.mean().item(), kl_loss.item()))
-
-    optimizer.zero_grad()
-    loss, ce_loss, kl_loss = compute_loss(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tokens,
-                                          target_tokens, mask, loss_fn, beta)
-    # with amp.scale_loss(loss, optimizer) as scaled_loss:
-    #     scaled_loss.backward()
-    scaler.scale(loss).backward()
-    # torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 5.0)  # max_grad_norm=1.0
-    # loss.backward()
-    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # max_grad_norm=1.0
-    # optimizer.step()
-    scaler.step(optimizer)
-    scaler.update()
-    output.append((loss.item(), ce_loss.mean().item(), kl_loss.item()))
-
-    return output
-
-
-def top_k_top_p_filtering(logits, top_k=100, top_p=0.95, filter_value=-float('Inf')):
-    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
-        Args:
-            logits: logits distribution shape (vocabulary size)
-            top_k > 0: keep only top k tokens with highest probability (top-k filtering).
-            top_p > 0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
-                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-        From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
-    """
-    top_k = min(top_k, logits.size(-1))  # Safety check
-    if top_k > 0:
-        # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
-        logits[indices_to_remove] = filter_value
-
-    if top_p > 0.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-
-        # Remove tokens with cumulative probability above the threshold
-        sorted_indices_to_remove = cumulative_probs > top_p
-        # Shift the indices to the right to keep also the first token above the threshold
-        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-        sorted_indices_to_remove[..., 0] = 0
-
-        # scatter sorted tensors to original indexing
-        indices_to_remove = sorted_indices_to_remove.scatter(dim=1, index=sorted_indices, src=sorted_indices_to_remove)
-        logits[indices_to_remove] = filter_value
-
-    return logits
-
-
-def repeat_score(text, ngram=[3, 4, 5, 6]):
-    ngram_list = []
-    for ng in ngram:
-        ngram_list.append([text[idx:idx + ng] for idx in range(len(text) - ng - 1)])
-
-    max_occurs = []
-    for ngrams in ngram_list:
-        count_result = Counter([' '.join(n) for n in ngrams])
-        try:
-            max_occurs.append(
-                max(count_result.values())
-            )
-        except:
-            pass
-
-    scores = [max_oc / ((len(text) / ngram[idx]) + ngram[idx]) for idx, max_oc in enumerate(max_occurs)]
-    return max(scores) if len(scores) >= 1 else 1.0
-
-
-def sample_sequence(model, tokenizer, length, batch_size=None, x_mask=None, x_tokens=None, y_mask=None, y_tokens=None,
-                    temperature=1, top_k=100, top_p=0.95, device='cuda', sample=True, eos_token=None, model_type='cvae'):
-    x_mask = x_mask.to(device)
-    x_tokens = x_tokens.to(device)
-    y_mask = y_mask.to(device)
-    y_tokens = y_tokens.to(device)
+def sample_sequence(model, length, batch_size=None, x_mask=None, x_tokens=None, y_mask=None, y_tokens=None,
+                    temperature=1, top_k=100, top_p=0.95, sample=True, eos_token=None, model_type='cvae'):
+    x_mask = x_mask.to(Device.device)
+    x_tokens = x_tokens.to(Device.device)
+    y_mask = y_mask.to(Device.device)
+    y_tokens = y_tokens.to(Device.device)
 
     with torch.no_grad():
         if model_type == 'cvae':
             try:
                 prior_mean, prior_logvar = model.encoder_prior(input_ids=x_tokens, attention_mask=x_mask)[:2]
             except:
-                prior_mean = prior_logvar = torch.zeros([batch_size, model.config.n_embd], device=device)
+                prior_mean = prior_logvar = torch.zeros([batch_size, model.config.n_embd], device=Device.device)
             latent_mean, latent_logvar = prior_mean, prior_logvar
             z = model.reparameterize(latent_mean, latent_logvar)
             assert not torch.isnan(z).any(), 'training get nan z'
@@ -216,8 +63,8 @@ def sample_sequence(model, tokenizer, length, batch_size=None, x_mask=None, x_to
         prev = x_tokens[:, -1].view(batch_size, -1)
 
         output = prev
-        probability = torch.tensor([], dtype=z.dtype, device=device)
-        if_end = torch.tensor([False] * batch_size, dtype=torch.bool, device=device)
+        probability = torch.tensor([], dtype=z.dtype, device=Device.device)
+        if_end = torch.tensor([False] * batch_size, dtype=torch.bool, device=Device.device)
 
         for i in range(length): #trange
             logits, mem = model.transformer(input_ids=prev, past=mem, representations=z)
@@ -300,8 +147,12 @@ def main():
     else:
         args.learn_prior = False
 
+    devices = '0'
+
     # GPU
-    if not torch.cuda.is_available(): args.no_gpu = True
+    if not torch.cuda.is_available():
+        args.no_gpu = True
+
     gpu = not args.no_gpu
     if gpu:
         print("There are ", torch.cuda.device_count(), " available GPUs!")
@@ -309,11 +160,12 @@ def main():
         print('Using GPU devices {}'.format(devices))
         torch.cuda.set_device(args.gpu)
         print('Current single GPU: {}'.format(torch.cuda.current_device()))
-    device = torch.device(args.gpu if gpu else "cpu")
+
+    Device.set_device(devices, args.gpu if gpu else "cpu")
+    # device = torch.device(args.gpu if gpu else "cpu")
 
     # randomness
     np.random.seed(args.seed)
-    prng = np.random.RandomState()
     torch.random.manual_seed(args.seed)
     if gpu: torch.cuda.manual_seed(args.seed); torch.cuda.manual_seed_all(args.seed)
 
@@ -361,6 +213,7 @@ def main():
     if args.learn_prior:
         init_para_frompretrained(VAE.encoder_prior, VAE.encoder, share_para=True)
         VAE.encoder_prior.averageSelfAttention.attention_weights = VAE.encoder.averageSelfAttention.attention_weights
+        
     VAE.lm_head.weight = gpt2_model.lm_head.weight
     if VAE.add_softmax:
         VAE.lm_head_rep = Conv1D(*gpt2_model.lm_head.weight.size())
@@ -414,7 +267,7 @@ def main():
     # Apply linear scaling rule to increase batch size for short sequence training.
     lr_schedule = switch_schedule(linear_schedule(args), batch_schedule[cur_b_schedule][0] / batch_schedule[-1][0],
                                   int(args.iterations * args.switch_time))
-    VAE = VAE.to(device)
+    VAE = VAE.to(Device.device)
     VAE.train()
 
     optimizer = torch.optim.AdamW(VAE.parameters(), lr=args.lr)
@@ -450,10 +303,10 @@ def main():
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(val_loader):
                 with torch.no_grad():
                     if args.model_type == 'cvae':
-                        loss, ce_loss, kl_loss = compute_loss(device, VAE, x_mask, x_tokens, y_mask, y_tokens,
+                        loss, ce_loss, kl_loss = compute_loss(VAE, x_mask, x_tokens, y_mask, y_tokens,
                                                               input_tokens, target_tokens, mask, loss_fn, 1.0)
                     else:
-                        loss, ce_loss, kl_loss = compute_loss_ae(device, VAE, x_mask, x_tokens, y_mask, y_tokens,
+                        loss, ce_loss, kl_loss = compute_loss_ae(VAE, x_mask, x_tokens, y_mask, y_tokens,
                                                               input_tokens, target_tokens, mask, loss_fn, 1.0)
 
                 if len(target_tokens.size()) == 1:
@@ -520,10 +373,10 @@ def main():
         with tqdm(total=len(test_loader)) as pbar:
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(
                     test_loader):
-                y_mask = y_mask.to(device)
-                y_tokens = y_tokens.to(device)
-                x_mask = x_mask.to(device)
-                x_tokens = x_tokens.to(device)
+                y_mask = y_mask.to(Device.device)
+                y_tokens = y_tokens.to(Device.device)
+                x_mask = x_mask.to(Device.device)
+                x_tokens = x_tokens.to(Device.device)
                 with torch.no_grad():
                     if args.model_type == 'cvae':
                         latent_mean, latent_logvar = VAE.encoder_prior(input_ids=x_tokens, attention_mask=x_mask)[:2]
@@ -618,166 +471,6 @@ def main():
 
         VAE.train()
 
-    # NOTE: This is the bidirectional running of the program
-    def get_sentence_encodings_and_masks(y_tokens, y_mask, tokenizer, batch_schedule, cur_b_schedule):
-        '''This function takes the y_tokens and y_mask and returns the sentence encodings and masks.'''
-        y_tokens_text = tokenizer.decode(y_tokens[0, :][y_mask[0, :] == 1].tolist())
-        y_sentences = y_tokens_text.split('.')
-
-        # Shape: (number of stories, number of sentences, max sentence length)
-        y_sentence_encodings = torch.zeros((batch_schedule[cur_b_schedule][0], len(y_sentences), batch_schedule[cur_b_schedule][1]), dtype=torch.long).to(device)
-        y_sentence_masks = torch.zeros((batch_schedule[cur_b_schedule][0], len(y_sentences), batch_schedule[cur_b_schedule][1]), dtype=torch.long).to(device)
-
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            partial_get_sentence_encoding_and_mask = partial(get_sentence_encoding_and_mask, tokenizer=tokenizer)
-            results = executor.map(partial_get_sentence_encoding_and_mask, y_sentences)
-            for i, result in enumerate(results):
-                y_sentence_encodings[:, i, :len(result[0])] = torch.tensor(result[0])
-                y_sentence_masks[:, i, :len(result[1])] = torch.tensor(result[1])
-
-        return y_sentence_encodings, y_sentence_masks
-
-    def get_sentence_encoding_and_mask(sentence, tokenizer):
-        '''This function takes a sentence and returns the encoding and mask.'''
-        sentence_encoding = tokenizer.encode(sentence + '.')
-        sentence_mask = torch.ones(len(sentence_encoding), dtype=torch.long).to(device)
-        assert(len(sentence_encoding) == len(sentence_mask))
-
-        return sentence_encoding, sentence_mask
-
-
-    def bidirectional_run(loss_type, device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
-        target_tokens, input_tokens, mask, loss_fn, beta, model_type, tokenizer, batch_schedule, cur_b_schedule):
-        '''This function runs the bidirectional training on different levels.
-        loss_types designates the possible loss types: 
-            "previous_sentence": The latest sentence needs to predict the previous one and vice versa.
-            "previous_sentences" The latest sentence needs to predict the previous ones and vice versa.
-            "prompt": The prompt predicts the target story and vice versa.
-        All other arguments are the same as train_step()
-        '''
-        y_sentence_encodings, y_sentence_masks = get_sentence_encodings_and_masks(y_tokens, y_mask, tokenizer, batch_schedule, cur_b_schedule)
-        assert(len(y_sentence_encodings) == len(y_sentence_masks))
-
-        if loss_type == "previous_sentence":
-            return find_loss_bidirectional_two_sentences(y_sentence_encodings, y_sentence_masks, device, VAE, optimizer,
-                y_sentence_encodings, y_sentence_masks, x_mask, x_tokens, target_tokens, input_tokens, mask, loss_fn, beta, model_type, batch_schedule, cur_b_schedule)
-        elif loss_type == "all_previous_sentences":
-            return find_loss_bidirectional_all_previous_sentences(y_sentence_encodings, y_sentence_masks, device, VAE, optimizer,
-                y_sentence_encodings, y_sentence_masks, x_mask, x_tokens, target_tokens, input_tokens, mask, loss_fn, beta, model_type, batch_schedule, cur_b_schedule)
-        elif loss_type == "prompt":
-            return train_step(device, VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
-                target_tokens, input_tokens, mask, loss_fn, beta, model_type)
-
-
-    def find_loss_bidirectional_two_sentences(y_sentence_encodings, y_sentence_masks, device,
-        VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens, target_tokens, input_tokens, mask, loss_fn,
-        beta, model_type, batch_schedule, cur_b_schedule):
-        total_loss_sentence_b_a = 0
-        total_loss_sentence_a_b = 0
-        total_ce_loss_sentence_b_a = 0
-        total_ce_loss_sentence_a_b = 0
-        total_kl_loss_sentence_b_a = 0
-        total_kl_loss_sentence_a_b = 0
-
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            # use a partial and map to run the function on all the sentences for all batches
-            partial_bidirectional_two_sentences = partial(bidirectional_two_sentences, device=device, VAE=VAE, optimizer=optimizer,
-                y_sentence_encodings=y_sentence_encodings, y_sentence_masks=y_sentence_masks, y_mask=y_mask, y_tokens=y_tokens, x_mask=x_mask, x_tokens=x_tokens,
-                target_tokens=target_tokens, input_tokens=input_tokens, mask=mask, loss_fn=loss_fn, beta=beta, model_type=model_type, batch_schedule=batch_schedule, cur_b_schedule=cur_b_schedule)
-            results = executor.map(partial_bidirectional_two_sentences, range(len(y_sentence_encodings)))
-            for result in results:
-                total_loss_sentence_b_a += result[0]
-                total_loss_sentence_a_b += result[1]
-                total_ce_loss_sentence_b_a += result[2]
-                total_ce_loss_sentence_a_b += result[3]
-                total_kl_loss_sentence_b_a += result[4]
-                total_kl_loss_sentence_a_b += result[5]
-
-        return (
-            total_loss_sentence_b_a,
-            total_loss_sentence_a_b,
-            total_ce_loss_sentence_b_a,
-            total_ce_loss_sentence_a_b,
-            total_kl_loss_sentence_b_a,
-            total_kl_loss_sentence_a_b
-        )
-
-    def bidirectional_two_sentences(idx, device, VAE, optimizer, y_sentence_encodings, y_sentence_masks, y_mask, y_tokens, x_mask, x_tokens,
-        target_tokens, input_tokens, mask, loss_fn, beta, model_type, batch_schedule, cur_b_schedule):
-        total_loss_sentence_b_a = 0
-        total_loss_sentence_a_b = 0
-        total_ce_loss_sentence_b_a = 0
-        total_ce_loss_sentence_a_b = 0
-        total_kl_loss_sentence_b_a = 0
-        total_kl_loss_sentence_a_b = 0
-
-        for batch_idx in range(batch_schedule[cur_b_schedule][0]):
-            for idx in range(len(y_sentence_encodings[batch_idx]) - 1):
-                y_sentence_encoding_a = y_sentence_encodings[batch_idx, idx].unsqueeze(0)
-                y_sentence_mask_a = y_sentence_masks[batch_idx, idx].unsqueeze(0)
-
-                y_sentence_encoding_b = y_sentence_encodings[batch_idx, idx + 1].unsqueeze(0)
-                y_sentence_mask_b = y_sentence_masks[batch_idx, idx + 1].unsqueeze(0)
-
-                # SENTENCE LEVEL LOSS, Sentence B -> Sentence A
-                output_sentence_b_a = train_step(device, VAE, optimizer, y_sentence_encoding_b, y_sentence_mask_b, y_sentence_encoding_a, y_sentence_mask_a,
-                        y_sentence_encoding_b, y_sentence_encoding_a, mask, loss_fn, beta, model_type)
-                loss_sentence_b_a, ce_loss_sentence_b_a, kl_loss_sentence_b_a = output_sentence_b_a[-1]
-
-                total_loss_sentence_b_a += loss_sentence_b_a
-                total_ce_loss_sentence_b_a += ce_loss_sentence_b_a
-                total_kl_loss_sentence_b_a += kl_loss_sentence_b_a
-
-                # # SENTENCE LEVEL LOSS, Sentence A -> Sentence B
-                output_sentence_a_b = train_step(device, VAE, optimizer, y_sentence_encoding_a, y_sentence_mask_a, y_sentence_encoding_b, y_sentence_mask_b,
-                        y_sentence_encoding_a, y_sentence_encoding_b, mask, loss_fn, beta, model_type)
-                loss_sentence_a_b, ce_loss_sentence_a_b, kl_loss_sentence_a_b = output_sentence_a_b[-1]
-
-                total_loss_sentence_a_b += loss_sentence_a_b
-                total_ce_loss_sentence_a_b += ce_loss_sentence_a_b
-                total_kl_loss_sentence_a_b += kl_loss_sentence_a_b
-
-        return (
-            total_loss_sentence_b_a,
-            total_loss_sentence_a_b,
-            total_ce_loss_sentence_b_a,
-            total_ce_loss_sentence_a_b,
-            total_kl_loss_sentence_b_a,
-            total_kl_loss_sentence_a_b
-        )
-
-
-    def find_loss_bidirectional_all_previous_sentences(y_sentence_encodings, y_sentence_masks, device,
-        VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens, target_tokens, input_tokens, mask, loss_fn,
-        beta, model_type, batch_schedule, cur_b_schedule):
-        total_loss_all_previous_sentences = 0
-        total_ce_loss_all_previous_sentences = 0
-        total_kl_loss_sentence_all_previous_sentences = 0
-
-        for batch_idx in range(batch_schedule[cur_b_schedule][0]):
-            for idx in range(len(y_sentence_encodings[batch_idx])):
-                y_sentence_encoding = y_sentence_encodings[batch_idx, idx].unsqueeze(0)
-                y_sentence_mask = y_sentence_masks[batch_idx, idx].unsqueeze(0)
-
-                if idx > 0:
-                    # SENTENCE LEVEL LOSS, Sentence B -> All Previous Sentences
-                    output_all_previous_sentences = train_step(device, VAE, optimizer, y_sentence_encoding,
-                        y_sentence_mask, y_sentence_encodings[batch_idx, :idx], y_sentence_masks[batch_idx, :idx],
-                        y_sentence_encoding, y_sentence_encodings[batch_idx, :idx], mask, loss_fn, beta, model_type
-                    )
-
-                    loss_all_previous_sentences, ce_loss_all_previous_sentences, kl_loss_sentence_all_previous_sentences = output_all_previous_sentences[-1]
-                    total_loss_all_previous_sentences += loss_all_previous_sentences
-                    total_ce_loss_all_previous_sentences += ce_loss_all_previous_sentences
-                    total_kl_loss_sentence_all_previous_sentences += kl_loss_sentence_all_previous_sentences
-
-        return (
-            total_loss_all_previous_sentences,
-            total_ce_loss_all_previous_sentences,
-            total_kl_loss_sentence_all_previous_sentences,
-        )
-
-
     def generate(test_loader, num_iters):
         VAE.eval()
 
@@ -820,7 +513,6 @@ def main():
                     # model, batch_size, temperature, top_k, top_p, eos_token, sample = VAE, args.batch_size, args.temperature, args.top_k, args.top_p, tokenizer.encoder['<|endoftext|>'], True
                     out, _ = sample_sequence(
                         model=VAE,
-                        tokenizer=tokenizer,
                         length=length,
                         batch_size=args.batch_size,
                         x_mask=x_mask,
@@ -830,7 +522,6 @@ def main():
                         temperature=args.temperature,
                         top_k=args.top_k,
                         top_p=args.top_p,
-                        device=device,
                         eos_token=tokenizer.encoder['<|endoftext|>'],
                         model_type=model_type
                     )
@@ -944,27 +635,28 @@ def main():
 
                 # This computes a training step going from input to output and computes the losses
                 # NORMAL LOSS, Prompt -> Story
-                output_forward = train_step(device, VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+                output_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
                         input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
                 loss_forward, ce_loss_forward, kl_loss_forward = output_forward[-1]
 
                 # BIDIRECTIONAL LOSSES
 
                 # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
-                previous_sentence_loss_output = bidirectional_run("previous_sentence", device, VAE, optimizer, x_mask,
+                previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, x_mask,
                     x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
                 (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
                 total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
 
                 # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
-                all_previous_sentences_loss_output = bidirectional_run("all_previous_sentences", device, VAE, optimizer, x_mask,
+                all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, x_mask,
                     x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
                 (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_sentence_all_previous_sentences) = all_previous_sentences_loss_output
                 print('total_loss_all_previous_sentences total_ce_loss_all_previous_sentences total_kl_loss_sentence_all_previous_sentences', total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_sentence_all_previous_sentences)
 
                 # PROMPT LEVEL LOSS, Story -> Prompt
-                output_prompt_backward = bidirectional_run("prompt", device, VAE, optimizer, y_mask, y_tokens,
-                    x_mask, x_tokens, target_tokens, input_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
+                output_prompt_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
+                    target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)
+
                 loss_prompt_backward, ce_loss_prompt_backward, kl_loss_prompt_backward = output_prompt_backward[-1]
 
                 loss = loss_forward + total_loss_sentence_b_a + total_loss_sentence_a_b + loss_prompt_backward
@@ -982,6 +674,8 @@ def main():
                 t_writer.add_scalar('beta', beta, num_iters)
 
                 if args.model_type == 'ae_vae_fusion':
+                    # Output is never defined.  Raise error
+                    raise NotImplementedError()
                     loss, ce_loss, kl_loss = output[0]
                     # Log to Tensorboard
                     t_writer.add_scalar('ae_loss', loss, num_iters)
@@ -1026,7 +720,6 @@ def main():
                         make_test=True,
                         num_workers=args.workers, data_type=args.data_type
                     )
-
 
         if not end:
             e += 1
