@@ -366,7 +366,7 @@ def main():
 
         VAE.train()
 
-    def test_plot(test_loader, num_iters):
+    def plot_input_distribution(test_loader, num_iters):
         VAE.eval()
 
         # get embedding
@@ -375,8 +375,7 @@ def main():
 
         # test_iter = iter(test_loader); x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask = next(test_iter)
         with tqdm(total=len(test_loader)) as pbar:
-            for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(
-                    test_loader):
+            for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(test_loader):
                 y_mask = y_mask.to(Device.device)
                 y_tokens = y_tokens.to(Device.device)
                 x_mask = x_mask.to(Device.device)
@@ -606,8 +605,11 @@ def main():
 
             VAE.train()
 
-    test_plot(test_loader, num_iters)
+    print("Measuring Input distribution...")
+    plot_input_distribution(test_loader, num_iters)
+    print("Val Setp...")
     val_step(val_loader)
+    print("Generate...")
     generate(test_loader, num_iters)
     torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + '.pt'))
 
@@ -647,13 +649,13 @@ def main():
 
                 # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
                 previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, x_mask,
-                    x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
+                    x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
                 (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
                 total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
 
                 # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
                 all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, x_mask,
-                    x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
+                    x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
                 (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_sentence_all_previous_sentences) = all_previous_sentences_loss_output
                 print('total_loss_all_previous_sentences total_ce_loss_all_previous_sentences total_kl_loss_sentence_all_previous_sentences', total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_sentence_all_previous_sentences)
 
@@ -700,7 +702,7 @@ def main():
                     logger.info('KL annealing restart')
 
                 if num_iters % 10000 == 0:
-                    test_plot(test_loader, num_iters)
+                    plot_input_distribution(test_loader, num_iters)
                     val_step(val_loader)
                     generate(test_loader, num_iters)
 
