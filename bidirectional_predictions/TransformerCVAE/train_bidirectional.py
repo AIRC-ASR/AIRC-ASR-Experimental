@@ -602,8 +602,11 @@ def main():
 
             VAE.train()
 
+    print("Test plot...")
     test_plot(test_loader, num_iters)
+    print("Val Setp...")
     val_step(val_loader)
+    print("Generate...")
     generate(test_loader, num_iters)
     torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + '.pt'))
 

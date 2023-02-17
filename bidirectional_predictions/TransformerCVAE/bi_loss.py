@@ -64,7 +64,7 @@ def find_loss_bidirectional_two_sentences(y_sentence_encodings, y_sentence_masks
 
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
         # use a partial and map to run the function on all the sentences for all batches
-        partial_bidirectional_two_sentences = partial(bidirectional_two_sentences, device=Device.device, VAE=VAE, optimizer=optimizer,
+        partial_bidirectional_two_sentences = partial(bidirectional_two_sentences, VAE=VAE, optimizer=optimizer,
             y_sentence_encodings=y_sentence_encodings, y_sentence_masks=y_sentence_masks, y_mask=y_mask, y_tokens=y_tokens, x_mask=x_mask, x_tokens=x_tokens,
             target_tokens=target_tokens, input_tokens=input_tokens, mask=mask, loss_fn=loss_fn, beta=beta, model_type=model_type, batch_schedule=batch_schedule, cur_b_schedule=cur_b_schedule)
         results = executor.map(partial_bidirectional_two_sentences, range(len(y_sentence_encodings)))
