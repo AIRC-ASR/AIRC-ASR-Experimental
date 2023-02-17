@@ -107,10 +107,6 @@ def main():
     parser.add_argument('--warmup', type=int, default=10000,
                         help="Amount of iterations to warmup, then decay. (-1 for no warmup and decay)")
 
-    parser.add_argument('--batch-sizes', nargs='+', type=int, default=[1],
-                        help='batch size per GPU. Lists the schedule.')
-    parser.add_argument('--seq-lens', nargs='+', type=int, default=[1024],
-                        help='seq length per sample. Lists the schedule.')
     parser.add_argument('--switch-time', type=float, default=0,
                         help="Percentage of iterations to spend on short sequence training.")
     parser.add_argument('--data-dir', type=str, default='data')
@@ -142,10 +138,13 @@ def main():
     parser.add_argument('--val_batch_size', type=int, default=1)
     parser.add_argument('--test_batch_size', type=int, default=1)
 
+    parser.add_argument('--short_seq_len', type=int, default=512)
+    parser.add_argument('--long_seq_len', type=int, default=1024)
+
     # NOTE: Use for changing the arguments of the program
-    args = parser.parse_args('test --batch-sizes 2 1 --seq-lens 512 1024 '
-                             '--add_input --learn_prior --fp16 --iterations 10 --switch-time 0.5 '
-                             '--train_batch_size 2 --val_batch_size 1 --test_batch_size 2'.split()) # wi.12.proj_vary_beta_cvae
+    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 10 --switch-time 0.5 '
+                             '--train_batch_size 2 --val_batch_size 1 --test_batch_size 8 '
+                             '--short_seq_len 512 --long_seq_len 1024 '.split()) # wi.12.proj_vary_beta_cvae
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -247,30 +246,27 @@ def main():
            parameter.requires_grad = False
 
     print('Setup data...')
-    # Batch and sequence length schedule
-    assert len(args.batch_sizes) == len(args.seq_lens)
-    batch_schedule = list(zip(map(int, args.batch_sizes), map(int, args.seq_lens)))
-    assert len(batch_schedule) <= 2, 'Currently not supporting multiple schedule'
-    cur_b_schedule = len(batch_schedule) - 1 if args.switch_time == 0 else 0
-    print('Batch schedule', batch_schedule, cur_b_schedule, args.seq_lens)
+    curr_seq_len = args.short_seq_len
     train_loader, val_loader, test_loader = prepare_dataset(
         args.data_dir, args.dataset, tokenizer,
-        args.train_batch_size, batch_schedule[cur_b_schedule][1],
-        args.val_batch_size, batch_schedule[-1][1],
-        args.test_batch_size, batch_schedule[-1][1],
+        args.train_batch_size, curr_seq_len,
+        args.val_batch_size, curr_seq_len,
+        args.test_batch_size, curr_seq_len,
         make_test=True,
         num_workers=args.workers, data_type=args.data_type
     )
     print('Done.')
 
     ###
-    val_loader = test_loader
+    # val_loader = test_loader
     ###
 
     print('Wrapping models and optimizers...')
 
     # Apply linear scaling rule to increase batch size for short sequence training.
-    lr_schedule = switch_schedule(linear_schedule(args), batch_schedule[cur_b_schedule][0] / batch_schedule[-1][0],
+    curr_batch_size = args.train_batch_size
+    curr_seq_len = args.short_seq_len
+    lr_schedule = switch_schedule(linear_schedule(args), curr_batch_size / curr_seq_len,
                                   int(args.iterations * args.switch_time))
     VAE = VAE.to(Device.device)
     VAE.train()
@@ -607,9 +603,9 @@ def main():
 
     print("Measuring Input distribution...")
     plot_input_distribution(test_loader, num_iters)
-    print("Val Setp...")
+    print("Val Setup...")
     val_step(val_loader)
-    print("Generate...")
+    print("Test: Generate...")
     generate(test_loader, num_iters)
     torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + '.pt'))
 
@@ -649,13 +645,13 @@ def main():
 
                 # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
                 previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, x_mask,
-                    x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
+                    x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len)
                 (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
                 total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
 
                 # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
                 all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, x_mask,
-                    x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
+                    x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len)
                 (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_sentence_all_previous_sentences) = all_previous_sentences_loss_output
                 print('total_loss_all_previous_sentences total_ce_loss_all_previous_sentences total_kl_loss_sentence_all_previous_sentences', total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_sentence_all_previous_sentences)
 
@@ -716,13 +712,13 @@ def main():
                 if args.switch_time > 0 and num_iters == int(args.iterations * args.switch_time):
                     print('Switch to long sequence training')
                     logger.info("Switch to long sequence training")
-                    # TODO: Figure out why this causes an index error
-                    cur_b_schedule += 1
+                    curr_seq_len = args.long_seq_len
+                    curr_batch_size = args.train_batch_size
                     train_loader, val_loader, test_loader = prepare_dataset(
                         args.data_dir, args.dataset, tokenizer,
-                        args.train_batch_size, batch_schedule[cur_b_schedule][1],
-                        args.val_batch_size, batch_schedule[-1][1],
-                        args.test_batch_size, batch_schedule[-1][1],
+                        args.train_batch_size, curr_seq_len,
+                        args.val_batch_size, curr_seq_len,
+                        args.test_batch_size, curr_seq_len,
                         make_test=True,
                         num_workers=args.workers, data_type=args.data_type
                     )
