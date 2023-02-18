@@ -12,4 +12,3 @@ scipy
 bert-serving
 bert-serving-client
 scikit-learn
-apex
