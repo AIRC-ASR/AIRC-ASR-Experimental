@@ -143,7 +143,7 @@ def main():
 
     # NOTE: Use for changing the arguments of the program
     args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
-                             '--train_batch_size 1 --val_batch_size 1 --test_batch_size 2 '
+                             '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
                              '--short_seq_len 1024 --long_seq_len 1024 '.split()) # wi.12.proj_vary_beta_cvae
 
     if args.model_type == 'cvae':
@@ -627,8 +627,6 @@ def main():
                 if num_iters % 100 == 0:
                     print("CURRENT ITERATION: ", num_iters)
 
-                print('input_tokens', input_tokens.shape)
-
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                 #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
@@ -647,11 +645,11 @@ def main():
 
                 # BIDIRECTIONAL LOSSES
 
-                # # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
-                # previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, x_mask,
-                #     x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
-                # (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
-                # total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
+                # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
+                previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, x_mask,
+                    x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+                (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
+                total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
 
                 # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
                 all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, x_mask,
@@ -667,9 +665,9 @@ def main():
                 # This finds the total loss for the next sentence, Sentence A -> Sentence B and Sentence B -> Sentence A
                 # And the total loss for all next sentences, Sentence A -> All Next Sentences
                 # And the total loss for all previous sentences, Sentence B -> All Previous Sentences
-                loss = loss_forward + loss_prompt_backward
-                ce_loss = ce_loss_forward + ce_loss_prompt_backward
-                kl_loss = kl_loss_forward + kl_loss_prompt_backward
+                loss = loss_forward + total_loss_sentence_b_a + total_loss_sentence_a_b + total_loss_all_previous_sentences + loss_prompt_backward
+                ce_loss = ce_loss_forward + total_ce_loss_sentence_b_a + total_ce_loss_sentence_a_b + total_ce_loss_all_previous_sentences + ce_loss_prompt_backward
+                kl_loss = kl_loss_forward + total_kl_loss_sentence_b_a + total_kl_loss_sentence_a_b + total_kl_loss_sentence_all_previous_sentences + kl_loss_prompt_backward
 
                 lr = scheduler.get_last_lr()[0]
                 # Log to Tensorboard

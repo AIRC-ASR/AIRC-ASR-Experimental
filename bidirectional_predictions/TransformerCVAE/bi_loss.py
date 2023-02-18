@@ -18,6 +18,7 @@ def get_sentence_encodings_and_masks(y_tokens, y_mask, tokenizer, curr_batch_siz
     # Each sentence is encoded (text maps to input IDs (integers)) and the mask is created (all ones for each character)
     y_sentence_encodings = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len), dtype=torch.long).to(Device.device)
     y_sentence_masks = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len), dtype=torch.long).to(Device.device)
+    assert(len(y_sentence_encodings) == len(y_sentence_masks))
 
     # Since the bidirectional loss of each story is independent of the others, we can use multithreading to speed up the process
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
@@ -79,7 +80,19 @@ def find_loss_bidirectional_two_sentences(y_sentence_encodings, y_sentence_masks
             y_sentence_encodings=y_sentence_encodings, y_sentence_masks=y_sentence_masks, mask=mask,
             loss_fn=loss_fn, beta=beta, model_type=model_type, curr_batch_size=curr_batch_size, curr_seq_len=curr_seq_len, input_tokens=input_tokens
         )
-        results = executor.map(partial_bidirectional_two_sentences, range(len(y_sentence_encodings)))
+        try:
+            results = executor.map(partial_bidirectional_two_sentences, range(len(y_sentence_encodings)))
+        except RuntimeError as e:
+            print(e)
+            print("RuntimeError: find_loss_bidirectional_two_sentences()")
+            return (
+                total_loss_sentence_b_a,
+                total_loss_sentence_a_b,
+                total_ce_loss_sentence_b_a,
+                total_ce_loss_sentence_a_b,
+                total_kl_loss_sentence_b_a,
+                total_kl_loss_sentence_a_b
+            )
 
         # This loop takes the results from the multithreading and sums the losses for each batch
         for result in results:
@@ -108,51 +121,29 @@ def find_loss_bidirectional_all_previous_sentences(y_sentence_encodings, y_sente
     total_ce_loss_all_previous_sentences = 0
     total_kl_loss_sentence_all_previous_sentences = 0
 
-    for batch_idx in range(curr_batch_size):
-        prev_encodings = []
-        prev_masks = []
-        for idx in range(len(y_sentence_encodings[batch_idx])):
-            y_sentence_encoding = y_sentence_encodings[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
-            y_sentence_mask = y_sentence_masks[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
+    mask = torch.ones((1, curr_seq_len), dtype=torch.long).to(Device.device)
+    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+        # use a partial and map to run the function on all the sentences for all batches
+        partial_bidirectional_all_previous_sentences = partial(bidirectional_all_previous_sentences, VAE=VAE, optimizer=optimizer,
+            y_sentence_encodings=y_sentence_encodings, y_sentence_masks=y_sentence_masks, mask=mask,
+            loss_fn=loss_fn, beta=beta, model_type=model_type, curr_batch_size=curr_batch_size, curr_seq_len=curr_seq_len, input_tokens=input_tokens
+        )
+        try:
+            results = executor.map(partial_bidirectional_all_previous_sentences, range(len(y_sentence_encodings)))
+        except RuntimeError as e:
+            print(e)
+            print("RuntimeError: find_loss_bidirectional_all_previous_sentences()")
+            return (
+                total_loss_all_previous_sentences,
+                total_ce_loss_all_previous_sentences,
+                total_kl_loss_sentence_all_previous_sentences
+            )
 
-            # This is the case where the sentence is the first sentence in the story
-            # It does not have any previous sentences before it to predict
-            if idx > 0:
-                print("idx", idx)
-                print('prev_encodings.shape', len(prev_encodings))
-                prev_encodings_tensor = torch.tensor(prev_encodings, dtype=torch.long).to(Device.device).unsqueeze(0)
-                prev_masks_tensor = torch.tensor(prev_masks, dtype=torch.long).to(Device.device).unsqueeze(0)
-                prev_encodings_tensor =  F.pad(prev_encodings_tensor, (0, curr_seq_len - prev_encodings_tensor.shape[1]))
-                prev_masks_tensor = F.pad(prev_masks_tensor, (0, curr_seq_len - prev_masks_tensor.shape[1]))
-                print("prev_encodings_tensor", prev_encodings_tensor.shape)
-                print("prev_masks_tensor", prev_masks_tensor.shape)
-                print('y_sentence_encodings[batch_idx, 0:idx]', idx, y_sentence_encodings[batch_idx, 0:idx].shape)
-                y_sentence_encoding = F.pad(y_sentence_encoding, (0, curr_seq_len - y_sentence_encoding.shape[1]))
-                y_sentence_mask = F.pad(y_sentence_mask, (0, curr_seq_len - y_sentence_mask.shape[1]))
-                print("y_sentence_encoding", y_sentence_encoding.shape)
-                print("y_sentence_mask", y_sentence_mask.shape)
-
-                # print("PADDED y_sentence_encoding", .shape)
-                # print("PADDED y_sentence_mask", F.pad(y_sentence_mask, (0, prev_encodings.shape[1] - curr_seq_len)).shape)
-                mask = torch.ones((1, curr_seq_len), dtype=torch.long).to(Device.device)
-                print('mask', mask.shape)
-                # previous_sentence_encodings_tensor = torch.tensor(previous_sentence_encodings, dtype=torch.long).to(Device.device)
-                # previous_sentence_masks_tensor = torch.tensor(previous_sentence_masks, dtype=torch.long).to(Device.device)
-
-                # SENTENCE LEVEL LOSS, Sentence B -> All Previous Sentences
-                output_all_previous_sentences = train_step(VAE, optimizer, y_sentence_mask,
-                    y_sentence_encoding, prev_encodings_tensor, prev_masks_tensor,
-                    y_sentence_encoding, prev_encodings_tensor, mask, loss_fn, beta, model_type
-                )
-
-                loss_all_previous_sentences, ce_loss_all_previous_sentences, kl_loss_sentence_all_previous_sentences = output_all_previous_sentences[-1]
-                total_loss_all_previous_sentences += loss_all_previous_sentences
-                total_ce_loss_all_previous_sentences += ce_loss_all_previous_sentences
-                total_kl_loss_sentence_all_previous_sentences += kl_loss_sentence_all_previous_sentences
-
-            print('y_sentence_encoding.flatten()', y_sentence_encoding.flatten().shape)
-            prev_encodings.extend(y_sentence_encoding.flatten().tolist())
-            prev_masks.extend(y_sentence_mask.flatten().tolist())
+        # This loop takes the results from the multithreading and sums the losses for each batch
+        for result in results:
+            total_loss_all_previous_sentences += result[0]
+            total_ce_loss_all_previous_sentences += result[1]
+            total_kl_loss_sentence_all_previous_sentences += result[2]
 
     return (
         total_loss_all_previous_sentences,
@@ -160,6 +151,49 @@ def find_loss_bidirectional_all_previous_sentences(y_sentence_encodings, y_sente
         total_kl_loss_sentence_all_previous_sentences,
     )
 
+def bidirectional_all_previous_sentences(idx, VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask,
+        loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens):
+    '''This function finds the loss for the bidirectional training on all previous sentences.
+    So if the sentence is the 3rd sentence in the story, it will predict the first two sentences and vice versa.'''
+    total_loss_all_previous_sentences = 0
+    total_ce_loss_all_previous_sentences = 0
+    total_kl_loss_sentence_all_previous_sentences = 0
+
+    for batch_idx in range(curr_batch_size):
+        prev_encodings = torch.zeros((1, curr_seq_len), dtype=torch.long).to(Device.device)
+        prev_masks = torch.zeros((1, curr_seq_len), dtype=torch.long).to(Device.device)
+        for idx in range(len(y_sentence_encodings[batch_idx])):
+            y_sentence_encoding = y_sentence_encodings[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
+            y_sentence_mask = y_sentence_masks[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
+            assert(y_sentence_encoding.shape[1] == y_sentence_mask.shape[1])
+
+            # This is the case where the sentence is the first sentence in the story
+            # It does not have any previous sentences before it to predict
+            if idx > 0:
+                y_sentence_encoding_padded = F.pad(y_sentence_encoding, (0, curr_seq_len - y_sentence_encoding.shape[1]))
+                y_sentence_mask_padded = F.pad(y_sentence_mask, (0, curr_seq_len - y_sentence_mask.shape[1]))
+                assert(y_sentence_encoding_padded.shape[1] == y_sentence_mask_padded.shape[1])
+
+                # SENTENCE LEVEL LOSS, Sentence B -> All Previous Sentences
+                output_all_previous_sentences = train_step(VAE, optimizer, y_sentence_mask_padded,
+                    y_sentence_encoding_padded, prev_encodings, prev_masks,
+                    y_sentence_encoding_padded, prev_encodings, mask, loss_fn, beta, model_type
+                )
+
+                loss_all_previous_sentences, ce_loss_all_previous_sentences, kl_loss_sentence_all_previous_sentences = output_all_previous_sentences[-1]
+                total_loss_all_previous_sentences += loss_all_previous_sentences
+                total_ce_loss_all_previous_sentences += ce_loss_all_previous_sentences
+                total_kl_loss_sentence_all_previous_sentences += kl_loss_sentence_all_previous_sentences
+
+            prev_encodings[0, 0: input_tokens.shape[1]] = y_sentence_encoding.flatten()
+            prev_masks[0, 0: input_tokens.shape[1]] = y_sentence_mask.flatten()
+            assert(prev_encodings.shape[1] == prev_masks.shape[1] == curr_seq_len)
+    
+    return (
+        total_loss_all_previous_sentences,
+        total_ce_loss_all_previous_sentences,
+        total_kl_loss_sentence_all_previous_sentences,
+    )
 
 def bidirectional_two_sentences(idx, VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask, 
         loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens):
@@ -176,9 +210,11 @@ def bidirectional_two_sentences(idx, VAE, optimizer, y_sentence_encodings, y_sen
             # Get the sentence encoding and mask for the current sentence and the next sentence
             y_sentence_encoding_a = y_sentence_encodings[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)       
             y_sentence_mask_a = y_sentence_masks[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
+            assert(y_sentence_encoding_a.shape[1] == y_sentence_mask_a.shape[1])
 
             y_sentence_encoding_b = y_sentence_encodings[batch_idx, idx + 1][0: input_tokens.shape[1]].unsqueeze(0)
             y_sentence_mask_b = y_sentence_masks[batch_idx, idx + 1][0: input_tokens.shape[1]].unsqueeze(0)
+            assert(y_sentence_encoding_b.shape[1] == y_sentence_mask_b.shape[1])
 
             # SENTENCE LEVEL LOSS, Sentence B -> Sentence A
             output_sentence_b_a = train_step(VAE, optimizer, y_sentence_encoding_b, y_sentence_mask_b, y_sentence_encoding_a, y_sentence_mask_a,
