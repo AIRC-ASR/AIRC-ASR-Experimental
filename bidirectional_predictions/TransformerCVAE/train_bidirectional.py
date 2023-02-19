@@ -104,7 +104,7 @@ def main():
     logger.debug(str(args).replace(',', '\n'))
 
     logger.info('Loading models...')
-    
+
     logger.setLevel(logging.WARNING)
     save_folder = os.path.join(args.out_dir, args.experiment)
     os.makedirs(save_folder, exist_ok=True)
@@ -223,6 +223,39 @@ def main():
         logger.info("Generate...")
         generate_samples(VAE, tokenizer, args, test_loader, num_iters, save_folder)
 
+    def calculate_loss(x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask):
+        # This computes a training step going from input to output and computes the losses
+        # NORMAL LOSS, Prompt -> Story
+        output_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+                input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
+        loss_forward, ce_loss_forward, kl_loss_forward = output_forward[-1]
+
+        # BIDIRECTIONAL LOSSES
+
+        # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
+        previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, x_mask,
+            x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
+        (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
+        total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
+
+        # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
+        all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, x_mask,
+            x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
+        (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, 
+        total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
+
+        # PROMPT LEVEL LOSS, Story -> Prompt
+        output_prompt_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
+            target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)
+
+        loss_prompt_backward, ce_loss_prompt_backward, kl_loss_prompt_backward = output_prompt_backward[-1]
+
+        loss = loss_forward + total_loss_sentence_b_a + total_loss_sentence_a_b + loss_prompt_backward + total_loss_all_previous_sentences
+        ce_loss = ce_loss_forward + total_ce_loss_sentence_b_a + total_ce_loss_sentence_a_b + ce_loss_prompt_backward + total_ce_loss_all_previous_sentences
+        kl_loss = kl_loss_forward + total_kl_loss_sentence_b_a + total_kl_loss_sentence_a_b + kl_loss_prompt_backward + total_kl_loss_all_previous_sentences
+
+        return loss, ce_loss, kl_loss
+
     eval_step()
     torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + '.pt'))
 
@@ -249,33 +282,7 @@ def main():
                         parameter.requires_grad = True
                     tuning_all = True
 
-                # This computes a training step going from input to output and computes the losses
-                # NORMAL LOSS, Prompt -> Story
-                output_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-                        input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
-                loss_forward, ce_loss_forward, kl_loss_forward = output_forward[-1]
-
-                # BIDIRECTIONAL LOSSES
-
-                # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
-                previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, x_mask,
-                    x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
-                (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
-                total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
-
-                # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
-                all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, x_mask,
-                    x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
-                
-                # PROMPT LEVEL LOSS, Story -> Prompt
-                output_prompt_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
-                    target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)
-
-                loss_prompt_backward, ce_loss_prompt_backward, kl_loss_prompt_backward = output_prompt_backward[-1]
-
-                loss = loss_forward + total_loss_sentence_b_a + total_loss_sentence_a_b + loss_prompt_backward
-                ce_loss = ce_loss_forward + total_ce_loss_sentence_b_a + total_ce_loss_sentence_a_b + ce_loss_prompt_backward
-                kl_loss = kl_loss_forward + total_kl_loss_sentence_b_a + total_kl_loss_sentence_a_b + kl_loss_prompt_backward
+                loss, ce_loss, kl_loss = calculate_loss(x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask)
                 logger.info(f'REAL LOSS {loss}')
 
                 lr = scheduler.get_last_lr()[0]
