@@ -79,9 +79,9 @@ def main():
     parser.add_argument('--all_sentence_loss_weight', type=float, default=1, help="Weight multiplier for all previous sentence loss (0 to A -> B).")
 
     # NOTE: Use for changing the arguments of the program
-    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
+    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000000 --switch-time 0.5 '
                              '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
-                             '--short_seq_len 1024 --long_seq_len 1024 --load out/test/'.split())
+                             '--short_seq_len 1024 --long_seq_len 1024'.split())
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -280,10 +280,6 @@ def main():
 
         with tqdm(total=len(train_loader)) as pbar:
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
-                if num_iters % 100 == 0:
-                    logger.info(f"CURRENT ITERATION: {num_iters}, {y_tokens.shape}")
-                torch.set_printoptions(threshold=10000)
-
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                 #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
@@ -295,7 +291,9 @@ def main():
                     tuning_all = True
 
                 loss, ce_loss, kl_loss = calculate_loss(x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask)
-                logger.info(f'REAL LOSS {loss}')
+                if num_iters % 100 == 0:
+                    logger.info(f"CURRENT ITERATION: {num_iters}, {y_tokens.shape}")
+                    logger.info(f"CURRENT LOSS: {loss}, {ce_loss}, {kl_loss}")
 
                 lr = scheduler.get_last_lr()[0]
                 # Log to Tensorboard
