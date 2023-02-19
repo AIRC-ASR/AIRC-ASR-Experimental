@@ -81,7 +81,8 @@ def main():
     # NOTE: Use for changing the arguments of the program
     args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000000 --switch-time 0.5 '
                              '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
-                             '--short_seq_len 1024 --long_seq_len 1024'.split())
+                             '--short_seq_len 1024 --long_seq_len 1024 '
+                             '--fwd_loss_weight 0.5 --bkwd_sentence_loss_weight 0.5 --all_sentence_loss_weight 0'.split())
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -268,7 +269,7 @@ def main():
         return loss, ce_loss, kl_loss
 
     eval_step()
-    torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + '.pt'))
+    torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}' + '.pt'))
 
     while num_iters < args.iterations:
         # Run epoch
@@ -292,8 +293,8 @@ def main():
 
                 loss, ce_loss, kl_loss = calculate_loss(x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask)
                 if num_iters % 100 == 0:
-                    logger.info(f"CURRENT ITERATION: {num_iters}, {y_tokens.shape}")
-                    logger.info(f"CURRENT LOSS: {loss}, {ce_loss}, {kl_loss}")
+                    logger.info(f"CURRENT ITERATION: {num_iters}")
+                    logger.info(f"CURRENT LOSS: Loss: {loss}, CE: {ce_loss}, KL: {kl_loss}")
 
                 lr = scheduler.get_last_lr()[0]
                 # Log to Tensorboard
