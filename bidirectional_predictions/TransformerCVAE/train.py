@@ -374,7 +374,6 @@ def main():
     tuning_all_after_iters = 40000
     tuning_all = False
     for name, parameter in VAE.named_parameters():
-        # print((name, parameter.requires_grad))
         new_pars = ['c_z', 'attention_weights', 'mean', 'logvar', 'input_proj', 'attn_proj', 'Nu_fc1', 'Nu_fc2', 'lm_head_rep']
 
         if not any([True if n in name else False for n in new_pars]):

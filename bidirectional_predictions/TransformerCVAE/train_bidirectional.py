@@ -37,10 +37,6 @@ def main():
     parser.add_argument('--warmup', type=int, default=10000,
                         help="Amount of iterations to warmup, then decay. (-1 for no warmup and decay)")
 
-    parser.add_argument('--batch-sizes', nargs='+', type=int, default=[1],
-                        help='batch size per GPU. Lists the schedule.')
-    parser.add_argument('--seq-lens', nargs='+', type=int, default=[1024],
-                        help='seq length per sample. Lists the schedule.')
     parser.add_argument('--switch-time', type=float, default=0,
                         help="Percentage of iterations to spend on short sequence training.")
     parser.add_argument('--data-dir', type=str, default='data')
@@ -68,9 +64,24 @@ def main():
 
     parser.add_argument('--learn_prior', action="store_true")
 
+    parser.add_argument('--train_batch_size', type=int, default=1)
+    parser.add_argument('--val_batch_size', type=int, default=1)
+    parser.add_argument('--test_batch_size', type=int, default=1)
+
+    parser.add_argument('--short_seq_len', type=int, default=512)
+    parser.add_argument('--long_seq_len', type=int, default=1024)
+
+    # Loss weighting args
+    parser.add_argument('--fwd_loss_weight', type=float, default=1, help="Weight multiplier for forward loss.")
+    parser.add_argument('--bkwd_loss_weight', type=float, default=1, help="Weight multiplier for backward loss.")
+    parser.add_argument('--fwd_sentence_loss_weight', type=float, default=1, help="Weight multiplier for forward sentence loss (A -> B).")
+    parser.add_argument('--bkwd_sentence_loss_weight', type=float, default=1, help="Weight multiplier for forward backward loss (B -> A).")
+    parser.add_argument('--all_sentence_loss_weight', type=float, default=1, help="Weight multiplier for all previous sentence loss (0 to A -> B).")
+
     # NOTE: Use for changing the arguments of the program
-    args = parser.parse_args('test --batch-sizes 2 1 --seq-lens 512 1024 '
-                             '--add_input --learn_prior --fp16 --iterations 10 --switch-time 0.5'.split()) # wi.12.proj_vary_beta_cvae
+    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
+                             '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
+                             '--short_seq_len 1024 --long_seq_len 1024 '.split())
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -86,13 +97,11 @@ def main():
     gpu = not args.no_gpu
     if gpu:
         logger.info(f"There are {torch.cuda.device_count()} available GPUs!")
-        # logger.info('Setting GPUs {}'.format(args.device))
         logger.info('Using GPU devices {}'.format(devices))
         torch.cuda.set_device(args.gpu)
         logger.info('Current single GPU: {}'.format(torch.cuda.current_device()))
 
     Device.set_device(devices, args.gpu if gpu else "cpu")
-    # device = torch.device(args.gpu if gpu else "cpu")
 
     # randomness
     np.random.seed(args.seed)
@@ -172,37 +181,29 @@ def main():
            parameter.requires_grad = False
 
     logger.info('Setup data...')
-    # Batch and sequence length schedule
-    assert len(args.batch_sizes) == len(args.seq_lens)
-    batch_schedule = list(zip(map(int, args.batch_sizes), map(int, args.seq_lens)))
-    assert len(batch_schedule) <= 2, 'Currently not supporting multiple schedule'
-    cur_b_schedule = len(batch_schedule) - 1 if args.switch_time == 0 else 0
-    logger.info(f'Batch schedule {batch_schedule}, {cur_b_schedule}, {args.seq_lens}')
+    curr_seq_len = args.short_seq_len
     train_loader, val_loader, test_loader = prepare_dataset(
         args.data_dir, args.dataset, tokenizer,
-        batch_schedule[cur_b_schedule][0], batch_schedule[cur_b_schedule][1],
-        batch_schedule[-1][0], batch_schedule[-1][1],
-        batch_schedule[-1][0], batch_schedule[-1][1],
+        args.train_batch_size, curr_seq_len,
+        args.val_batch_size, curr_seq_len,
+        args.test_batch_size, curr_seq_len,
         make_test=True,
         num_workers=args.workers, data_type=args.data_type
     )
     logger.info('Done.')
 
-    ###
-    val_loader = test_loader
-    ###
-
     logger.info('Wrapping models and optimizers...')
 
     # Apply linear scaling rule to increase batch size for short sequence training.
-    lr_schedule = switch_schedule(linear_schedule(args), batch_schedule[cur_b_schedule][0] / batch_schedule[-1][0],
+    curr_batch_size = args.train_batch_size
+    curr_seq_len = args.short_seq_len
+    lr_schedule = switch_schedule(linear_schedule(args), curr_batch_size / curr_seq_len,
                                   int(args.iterations * args.switch_time))
     VAE = VAE.to(Device.device)
     VAE.train()
 
     optimizer = torch.optim.AdamW(VAE.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_schedule)
-    # VAE, optimizer = amp.initialize(VAE, optimizer, opt_level=args.fp16_opt_level)
 
     loss_fn = nn.CrossEntropyLoss(reduction='none')
     logger.info('Done.')
@@ -216,6 +217,8 @@ def main():
     beta = args.beta_0
 
     def eval_step():
+        '''Evaluates the performance of the model after a training step'''
+
         logger.info("Measuring Input distribution...")
         plot_input_distribution(VAE, tokenizer, args.model_type, test_loader, args.dataset, num_iters, save_folder)
         logger.info("Val Setp...")
@@ -224,35 +227,43 @@ def main():
         generate_samples(VAE, tokenizer, args, test_loader, num_iters, save_folder)
 
     def calculate_loss(x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask):
+        '''Calculates the loss of the model forward, backward, and for the sentence combinations'''
+
         # This computes a training step going from input to output and computes the losses
         # NORMAL LOSS, Prompt -> Story
-        output_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-                input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)
-        loss_forward, ce_loss_forward, kl_loss_forward = output_forward[-1]
+        loss_forward, ce_loss_forward, kl_loss_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+            input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)[-1]
+
+        # PROMPT LEVEL LOSS, Story -> Prompt
+        loss_backward, ce_loss_backward, kl_loss_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
+            target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)[-1]
 
         # BIDIRECTIONAL LOSSES
 
         # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
         previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, x_mask,
-            x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
+            x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
         (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
         total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
 
         # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
         all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, x_mask,
-            x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, batch_schedule, cur_b_schedule)
+            x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
         (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, 
         total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
 
-        # PROMPT LEVEL LOSS, Story -> Prompt
-        output_prompt_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
-            target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)
+        # TOTAL LOSSES
+        loss = (args.fwd_loss_weight*loss_forward) + (args.bkwd_loss_weight*loss_backward) + \
+            (args.bkwd_sentence_loss_weight*total_loss_sentence_b_a) + \
+            (args.fwd_sentence_loss_weight*total_loss_sentence_a_b) + (args.all_sentence_loss_weight*total_loss_all_previous_sentences)
 
-        loss_prompt_backward, ce_loss_prompt_backward, kl_loss_prompt_backward = output_prompt_backward[-1]
+        ce_loss = (args.fwd_loss_weight*ce_loss_forward) + (args.bkwd_loss_weight*ce_loss_backward) + \
+            (args.bkwd_sentence_loss_weight*total_ce_loss_sentence_b_a) + \
+            (args.fwd_sentence_loss_weight*total_ce_loss_sentence_a_b) + (args.all_sentence_loss_weight*total_ce_loss_all_previous_sentences)
 
-        loss = loss_forward + total_loss_sentence_b_a + total_loss_sentence_a_b + loss_prompt_backward + total_loss_all_previous_sentences
-        ce_loss = ce_loss_forward + total_ce_loss_sentence_b_a + total_ce_loss_sentence_a_b + ce_loss_prompt_backward + total_ce_loss_all_previous_sentences
-        kl_loss = kl_loss_forward + total_kl_loss_sentence_b_a + total_kl_loss_sentence_a_b + kl_loss_prompt_backward + total_kl_loss_all_previous_sentences
+        kl_loss = (args.fwd_loss_weight*kl_loss_forward) + (args.bkwd_loss_weight*kl_loss_backward) + \
+            (args.bkwd_sentence_loss_weight*total_kl_loss_sentence_b_a) + \
+            (args.fwd_sentence_loss_weight*total_kl_loss_sentence_a_b) + (args.all_sentence_loss_weight*total_kl_loss_all_previous_sentences)
 
         return loss, ce_loss, kl_loss
 
@@ -269,7 +280,8 @@ def main():
 
         with tqdm(total=len(train_loader)) as pbar:
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
-                logger.info(f"CURRENT ITERATION: {num_iters}, {y_tokens.shape}")
+                if num_iters % 100 == 0:
+                    logger.info(f"CURRENT ITERATION: {num_iters}, {y_tokens.shape}")
                 torch.set_printoptions(threshold=10000)
 
                 # NOTE: Swaps all the variables for the bidirectional running of the program
@@ -327,14 +339,14 @@ def main():
                     torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + '.pt'))
 
                 if args.switch_time > 0 and num_iters == int(args.iterations * args.switch_time):
-                    logger.info('Switch to long sequence training')
-                    # TODO: Figure out why this causes an index error
-                    cur_b_schedule += 1
+                    logger.info("Switch to long sequence training")
+                    curr_seq_len = args.long_seq_len
+                    curr_batch_size = args.train_batch_size
                     train_loader, val_loader, test_loader = prepare_dataset(
                         args.data_dir, args.dataset, tokenizer,
-                        batch_schedule[cur_b_schedule][0], batch_schedule[cur_b_schedule][1],
-                        batch_schedule[-1][0], batch_schedule[-1][1],
-                        batch_schedule[-1][0], batch_schedule[-1][1],
+                        args.train_batch_size, curr_seq_len,
+                        args.val_batch_size, curr_seq_len,
+                        args.test_batch_size, curr_seq_len,
                         make_test=True,
                         num_workers=args.workers, data_type=args.data_type
                     )

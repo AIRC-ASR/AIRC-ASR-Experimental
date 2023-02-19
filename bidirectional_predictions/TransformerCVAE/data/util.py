@@ -447,7 +447,6 @@ def collate_fn(samples):
 
 def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len, val_bsz, val_seq_len, test_bsz=1,
                     test_seq_len=1024, data_type='t0', num_workers=1, make_train=True, make_val=True, make_test=False):
-    # data_dir, dataset_name, tokenizer, train_bsz, train_seq_len, val_bsz, val_seq_len, num_workers = args.data_dir, args.dataset, tokenizer, batch_schedule[cur_b_schedule][0], batch_schedule[cur_b_schedule][1], batch_schedule[-1][0], batch_schedule[-1][1], args.workers
 
     loaders = []
     if dataset_name == 'wp':
@@ -553,7 +552,7 @@ def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len,
             d_val = PlotDataset(val_text, val_preproc)
             if data_type == 't7' or data_type == 't8':
                 d_val = [t for lt in d_val for t in lt]
-            print('Val dataset size', len(d_val))
+            print('Val dataset size', len(d_val), val_bsz)
             loaders.append(data.DataLoader(d_val,
                                            # sampler=DistributedSampler(d_val),
                                            batch_size=val_bsz,
