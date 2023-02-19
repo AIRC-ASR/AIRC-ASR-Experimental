@@ -1,24 +1,20 @@
-import pickle
-import os
+import os, re, gc
 import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import argparse
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config
 from tqdm import tqdm
-from tqdm import trange
 import importlib
 import logging
 import copy
-from data.util import *
-from util import *
+from util import num_params, init_para_frompretrained, prepare_dataset
 
 from model import VAEModel, Conv1D
 
 
-def compute_loss(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta):
+def compute_loss(device, model, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask, loss_fn, beta, tokenizer):
     input_tokens = input_tokens.to(device)
     target_tokens = target_tokens.to(device)
     mask = mask.to(device)
@@ -84,12 +80,12 @@ def run_model():
     parser.add_argument('--out-dir', type=str, default='out')
 
     parser.add_argument('--data_type', type=str, default='t1', choices=['t' + str(i) for i in range(9)], help="t: type")
-    parser.add_argument('--model_type', type=str, default='ae_vae_fusion', choices=['cvae', 'ae_vae_fusion'])
+    parser.add_argument('--model_type', type=str, default='cvae', choices=['cvae', 'ae_vae_fusion'])
     parser.add_argument('--dataset', type=str, default='wi', choices=['wp', 'wi'], help="Dataset to use for training")
     parser.add_argument('--workers', default=1, type=int, metavar='N', help='number of data loading workers')
 
     # use GPU
-    parser.add_argument('--gpu', default=3, type=int)
+    parser.add_argument('--gpu', default=0, type=int)
     parser.add_argument('--no_gpu', action="store_true")
 
     parser.add_argument('--fp16', action='store_true', help="Train using FP16?")
@@ -101,8 +97,8 @@ def run_model():
 
     parser.add_argument('--learn_prior', action="store_true")
 
-    args = parser.parse_args('--model-path out/wi.2.proj_beta_half_ae/model_0150000.pt '
-                             '--add_attn --learn_prior --fp16'.split())
+    args = parser.parse_args('--model-path out/test/model_latest.pt '
+                             '--add_input --learn_prior'.split()) # --fp16
     print(args)
 
     if args.model_type == 'cvae':
@@ -145,7 +141,7 @@ def run_model():
     config.n_ctx = 1024
 
     # add special tokens
-    special_tokens_dict = {
+    """special_tokens_dict = {
         'pad_token': '<|startoftext|>',
         'cls_token': '<|startofcond|>',
         'sep_token': '<|sepofcond|>',
@@ -155,7 +151,7 @@ def run_model():
     print('We have added', num_added_toks, 'special tokens')
     # Notice: resize_token_embeddings expect to receive the full size of the new vocab
     gpt2_model.resize_token_embeddings(len(tokenizer))
-    assert tokenizer.pad_token == '<|startoftext|>'
+    assert tokenizer.pad_token == '<|startoftext|>'"""
 
     VAE = VAEModel(config, add_input=args.add_input, add_attn=args.add_attn, add_softmax=args.add_softmax,
                    attn_proj_vary=args.attn_proj_vary, learn_prior=args.learn_prior)
@@ -164,6 +160,7 @@ def run_model():
     if args.learn_prior:
         init_para_frompretrained(VAE.encoder_prior, VAE.encoder, share_para=True)
         VAE.encoder_prior.averageSelfAttention.attention_weights = VAE.encoder.averageSelfAttention.attention_weights
+    
     VAE.lm_head.weight = gpt2_model.lm_head.weight
     if VAE.add_softmax:
         VAE.lm_head_rep = Conv1D(*gpt2_model.lm_head.weight.size())
@@ -214,6 +211,7 @@ def run_model():
     logp_sum_l = []
 
     stats = []
+
     # test_iter = iter(test_loader); x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask = next(test_iter)
     with tqdm(total=len(test_loader)) as pbar:
         for i_test, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(test_loader):
@@ -221,7 +219,7 @@ def run_model():
             with torch.no_grad():
                 if args.model_type == 'cvae':
                     loss, ce_loss, kl_loss = compute_loss(device, VAE, x_mask, x_tokens, y_mask, y_tokens, input_tokens,
-                                                          target_tokens, mask, loss_fn, 1.0)
+                                                          target_tokens, mask, loss_fn, 1.0, tokenizer)
                 else:
                     loss, ce_loss, kl_loss = compute_loss_ae(device, VAE, x_mask, x_tokens, y_mask, y_tokens, input_tokens,
                                                           target_tokens, mask, loss_fn, 1.0)

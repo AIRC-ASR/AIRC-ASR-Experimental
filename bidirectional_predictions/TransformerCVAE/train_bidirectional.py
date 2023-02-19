@@ -81,7 +81,7 @@ def main():
     # NOTE: Use for changing the arguments of the program
     args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
                              '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
-                             '--short_seq_len 1024 --long_seq_len 1024 '.split())
+                             '--short_seq_len 1024 --long_seq_len 1024 --load out/test/'.split())
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -160,7 +160,7 @@ def main():
     logger.info(f'VAE_params: {num_params(VAE)}')  # 286694400
     if args.load:
         logger.info('Loading model weights...')
-        state = torch.load(os.path.join(args.load, 'model_latest.pt'))  # , map_location='cpu' model_latest.pt
+        state = torch.load(os.path.join(args.load, 'model_latest.pt'), map_location=args.gpu if gpu else "cpu") # model_latest.pt
         if 'module' in list(state.keys())[0]:  # model_path is data parallel model with attr 'module'
             state_copy = copy.copy(state)
             keys = state_copy.keys()
