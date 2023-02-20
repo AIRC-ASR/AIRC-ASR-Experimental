@@ -86,12 +86,7 @@ def train_step(model, optimizer, x_mask, x_tokens, y_mask, y_tokens, input_token
         loss, ce_loss, kl_loss = compute_loss_ae(model, x_mask, x_tokens, y_mask, y_tokens, input_tokens,
                                               target_tokens, mask, loss_fn, beta)
         scaler.scale(loss).backward()
-        # with amp.scale_loss(loss, optimizer) as scaled_loss:
-        #     scaled_loss.backward()
-        # torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 5.0)  # max_grad_norm=1.0
-        # loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # max_grad_norm=1.0
-        # optimizer.step()
         scaler.step(optimizer)
         scaler.update()
         output.append((loss.item(), ce_loss.mean().item(), kl_loss.item()))
@@ -99,13 +94,8 @@ def train_step(model, optimizer, x_mask, x_tokens, y_mask, y_tokens, input_token
     optimizer.zero_grad()
     loss, ce_loss, kl_loss = compute_loss(model, x_mask, x_tokens, y_mask, y_tokens, input_tokens,
                                           target_tokens, mask, loss_fn, beta)
-    # with amp.scale_loss(loss, optimizer) as scaled_loss:
-    #     scaled_loss.backward()
     scaler.scale(loss).backward()
-    # torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 5.0)  # max_grad_norm=1.0
-    # loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # max_grad_norm=1.0
-    # optimizer.step()
     scaler.step(optimizer)
     scaler.update()
     output.append((loss.item(), ce_loss.mean().item(), kl_loss.item()))
