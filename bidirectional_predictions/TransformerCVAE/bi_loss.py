@@ -16,8 +16,9 @@ def get_sentence_encodings_and_masks(y_tokens, y_mask, tokenizer, curr_batch_siz
     # Shape: (number of stories, number of sentences, max sentence length)
     # Creates a tensor of zeros with the shape of the number of stories, number of sentences, and max sentence length
     # Each sentence is encoded (text maps to input IDs (integers)) and the mask is created (all ones for each character)
-    y_sentence_encodings = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len), dtype=torch.long).to(Device.device)
-    y_sentence_masks = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len), dtype=torch.long).to(Device.device)
+    with torch.no_grad():
+        y_sentence_encodings = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len), dtype=torch.long).to(Device.device)
+        y_sentence_masks = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len), dtype=torch.long).to(Device.device)
     assert(len(y_sentence_encodings) == len(y_sentence_masks))
 
     # Since the bidirectional loss of each story is independent of the others, we can use multithreading to speed up the process
@@ -28,15 +29,16 @@ def get_sentence_encodings_and_masks(y_tokens, y_mask, tokenizer, curr_batch_siz
 
         # This loop takes the results from the multithreading and puts them into the tensor
         for i, result in enumerate(results):
-            y_sentence_encodings[:, i, :len(result[0])] = torch.Tensor(result[0])
-            y_sentence_masks[:, i, :len(result[1])] = torch.Tensor(result[1])
+            y_sentence_encodings[:, i, :len(result[0])] = torch.tensor(result[0], dtype=torch.long)
+            y_sentence_masks[:, i, :len(result[1])] = result[1]
 
     return y_sentence_encodings, y_sentence_masks
 
 def get_sentence_encoding_and_mask(sentence, tokenizer):
     '''This function takes a sentence and returns the encoding and mask.'''
     sentence_encoding = tokenizer.encode(sentence + '.')
-    sentence_mask = torch.ones(len(sentence_encoding), dtype=torch.long).to(Device.device)
+    with torch.no_grad():
+        sentence_mask = torch.ones(len(sentence_encoding), dtype=torch.long).to(Device.device)
     assert(len(sentence_encoding) == len(sentence_mask))
 
     return sentence_encoding, sentence_mask
@@ -160,8 +162,9 @@ def bidirectional_all_previous_sentences(idx, VAE, optimizer, y_sentence_encodin
     total_kl_loss_sentence_all_previous_sentences = 0
 
     for batch_idx in range(curr_batch_size):
-        prev_encodings = torch.zeros((1, curr_seq_len), dtype=torch.long).to(Device.device)
-        prev_masks = torch.zeros((1, curr_seq_len), dtype=torch.long).to(Device.device)
+        with torch.no_grad():
+            prev_encodings = torch.zeros((1, curr_seq_len), dtype=torch.long).to(Device.device)
+            prev_masks = torch.zeros((1, curr_seq_len), dtype=torch.long).to(Device.device)
         for idx in range(len(y_sentence_encodings[batch_idx])):
             y_sentence_encoding = y_sentence_encodings[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
             y_sentence_mask = y_sentence_masks[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
