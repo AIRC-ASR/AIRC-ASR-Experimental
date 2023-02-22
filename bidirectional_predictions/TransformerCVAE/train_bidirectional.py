@@ -3,7 +3,7 @@ import os, time, gc, argparse, math
 import torch
 import torch.nn as nn
 import numpy as np
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config, Conv1D
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config, Conv1D, AutoTokenizer, OPTModel, OPTConfig
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
 import copy
@@ -124,12 +124,15 @@ def main():
     cache_dir = os.path.join(args.out_dir, 'model_cache')
     os.makedirs(cache_dir, exist_ok=True)
     # Load pre-trained teacher tokenizer (vocabulary)
-    tokenizer = GPT2Tokenizer.from_pretrained('gpt2', cache_dir=cache_dir)
+    # tokenizer = GPT2Tokenizer.from_pretrained('gpt2', cache_dir=cache_dir)
+    tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", cache_dir=cache_dir)
     # Hack to allow tokenizing longer sequences.
     tokenizer.max_len = int(1e12)
-    gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir=cache_dir)
-    logger.info(f'gpt2_params: {num_params(gpt2_model)}')  # gpt2: 124439808
-    config = GPT2Config()
+    # tf_model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir=cache_dir)
+    tf_model = OPTModel.from_pretrained("facebook/opt-350m", cache_dir=cache_dir)
+    logger.info(f'tf_params: {num_params(tf_model)}')  # gpt2: 124439808
+    # config = GPT2Config()
+    config = OPTConfig()
     config.n_ctx = 1024
 
     # add special tokens
@@ -147,15 +150,15 @@ def main():
 
     VAE = VAEModel(config, add_input=args.add_input, add_attn=args.add_attn, add_softmax=args.add_softmax,
                    attn_proj_vary=args.attn_proj_vary, learn_prior=args.learn_prior)
-    init_para_frompretrained(VAE.transformer, gpt2_model.transformer, share_para=True)
-    init_para_frompretrained(VAE.encoder, gpt2_model.transformer, share_para=False)
+    init_para_frompretrained(VAE.transformer, tf_model.transformer, share_para=True)
+    init_para_frompretrained(VAE.encoder, tf_model.transformer, share_para=False)
     if args.learn_prior:
         init_para_frompretrained(VAE.encoder_prior, VAE.encoder, share_para=True)
         VAE.encoder_prior.averageSelfAttention.attention_weights = VAE.encoder.averageSelfAttention.attention_weights
         
-    VAE.lm_head.weight = gpt2_model.lm_head.weight
+    VAE.lm_head.weight = tf_model.lm_head.weight
     if VAE.add_softmax:
-        VAE.lm_head_rep = Conv1D(*gpt2_model.lm_head.weight.size())
+        VAE.lm_head_rep = Conv1D(*tf_model.lm_head.weight.size())
         # VAE.lm_head_rep = LM_head_rep(*gpt2_model.lm_head.weight.size()[::-1])
     logger.setLevel(logging.INFO)
     logger.info(f'VAE_params: {num_params(VAE)}')  # 286694400
