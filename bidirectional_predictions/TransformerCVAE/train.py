@@ -290,7 +290,7 @@ def main():
 
     # NOTE: Use for changing arguments in the program
     args = parser.parse_args('test --batch-sizes 1 --seq-lens 1024 '
-                             '--add_input --learn_prior --fp16'.split()) # wi.12.proj_vary_beta_cvae
+                             '--add_input --learn_prior --gpu 0 --fp16 --iterations 40000'.split()) # wi.12.proj_vary_beta_cvae
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -511,9 +511,10 @@ def main():
         # get embedding
         X_emb = None
         y = None
-
+        
         # test_iter = iter(test_loader); x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask = next(test_iter)
         with tqdm(total=len(test_loader)) as pbar:
+          
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(
                     test_loader):
                 y_mask = y_mask.to(device)
@@ -557,7 +558,6 @@ def main():
                             label.append(None)
                 else:
                     raise Exception
-
                 if i == 0:
                     X_emb = latent_mean.data
                     y = label
