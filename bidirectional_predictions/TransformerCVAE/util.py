@@ -14,25 +14,26 @@ def num_params(model):
 
 
 def init_para_frompretrained(m, pm, share_para=False):
-    m.wte.weight = pm.wte.weight
-    m.wpe.weight = pm.wpe.weight
+    m.wte.weight = pm.embed_tokens.weight
+    m.wpe.weight = pm.embed_positions.weight
 
-    for i in range(min(len(m.h), len(pm.h))):
-        m.h[i].ln_1.weight = pm.h[i].ln_1.weight if share_para else copy.copy(pm.h[i].ln_1.weight)
-        m.h[i].ln_1.bias = pm.h[i].ln_1.bias if share_para else copy.copy(pm.h[i].ln_1.bias)
-        m.h[i].attn.c_attn.weight = pm.h[i].attn.c_attn.weight if share_para else copy.copy(pm.h[i].attn.c_attn.weight)
-        m.h[i].attn.c_attn.bias = pm.h[i].attn.c_attn.bias if share_para else copy.copy(pm.h[i].attn.c_attn.bias)
-        m.h[i].attn.c_proj.weight = pm.h[i].attn.c_proj.weight if share_para else copy.copy(pm.h[i].attn.c_proj.weight)
-        m.h[i].attn.c_proj.bias = pm.h[i].attn.c_proj.bias if share_para else copy.copy(pm.h[i].attn.c_proj.bias)
-        m.h[i].ln_2.weight = pm.h[i].ln_2.weight if share_para else copy.copy(pm.h[i].ln_2.weight)
-        m.h[i].ln_2.bias = pm.h[i].ln_2.bias if share_para else copy.copy(pm.h[i].ln_2.bias)
-        m.h[i].mlp.c_fc.weight = pm.h[i].mlp.c_fc.weight if share_para else copy.copy(pm.h[i].mlp.c_fc.weight)
-        m.h[i].mlp.c_fc.bias = pm.h[i].mlp.c_fc.bias if share_para else copy.copy(pm.h[i].mlp.c_fc.bias)
-        m.h[i].mlp.c_proj.weight = pm.h[i].mlp.c_proj.weight if share_para else copy.copy(pm.h[i].mlp.c_proj.weight)
-        m.h[i].mlp.c_proj.bias = pm.h[i].mlp.c_proj.bias if share_para else copy.copy(pm.h[i].mlp.c_proj.bias)
+    for i in range(min(len(m.h), len(pm.layers))):
+        m.h[i].ln_1.weight = pm.layers[i].fc1.weight if share_para else copy.copy(pm.layers[i].fc1.weight)
+        m.h[i].ln_1.bias = pm.layers[i].fc1.bias if share_para else copy.copy(pm.layers[i].fc1.bias)
+        # m.h[i].attn.c_attn.weight = pm.layers[i].attn.c_attn.weight if share_para else copy.copy(pm.layers[i].attn.c_attn.weight)
+        # m.h[i].attn.c_attn.bias = pm.layers[i].attn.c_attn.bias if share_para else copy.copy(pm.layers[i].attn.c_attn.bias)
+        # m.h[i].attn.c_proj.weight = pm.layers[i].attn.c_proj.weight if share_para else copy.copy(pm.layers[i].attn.c_proj.weight)
+        # m.h[i].attn.c_proj.bias = pm.layers[i].attn.c_proj.bias if share_para else copy.copy(pm.layers[i].attn.c_proj.bias)
+        m.h[i].attn = pm.layers[i].self_attn
+        m.h[i].ln_2.weight = pm.layers[i].fc2.weight if share_para else copy.copy(pm.layers[i].fc2.weight)
+        m.h[i].ln_2.bias = pm.layers[i].fc2.bias if share_para else copy.copy(pm.layers[i].fc2.bias)
+        # m.h[i].mlp.c_fc.weight = pm.layers[i].mlp.c_fc.weight if share_para else copy.copy(pm.layers[i].mlp.c_fc.weight)
+        # m.h[i].mlp.c_fc.bias = pm.layers[i].mlp.c_fc.bias if share_para else copy.copy(pm.layers[i].mlp.c_fc.bias)
+        # m.h[i].mlp.c_proj.weight = pm.layers[i].mlp.c_proj.weight if share_para else copy.copy(pm.layers[i].mlp.c_proj.weight)
+        # m.h[i].mlp.c_proj.bias = pm.layers[i].mlp.c_proj.bias if share_para else copy.copy(pm.layers[i].mlp.c_proj.bias)
 
-    m.ln_f.weight = pm.ln_f.weight if share_para else copy.copy(pm.ln_f.weight)
-    m.ln_f.bias = pm.ln_f.bias if share_para else copy.copy(pm.ln_f.bias)
+    # m.ln_f.weight = pm.ln_f.weight if share_para else copy.copy(pm.ln_f.weight)
+    # m.ln_f.bias = pm.ln_f.bias if share_para else copy.copy(pm.ln_f.bias)
 
 
 def switch_schedule(schedule, mult, switch):

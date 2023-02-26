@@ -8,7 +8,7 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 import copy
 from util import init_para_frompretrained, num_params, prepare_dataset, linear_schedule, switch_schedule
-from model import VAEModel
+from opt_model import VAEModel
 import nltk
 from bi_training_core import train_step, Device
 from bi_loss import bidirectional_loss
@@ -150,8 +150,8 @@ def main():
 
     VAE = VAEModel(config, add_input=args.add_input, add_attn=args.add_attn, add_softmax=args.add_softmax,
                    attn_proj_vary=args.attn_proj_vary, learn_prior=args.learn_prior)
-    init_para_frompretrained(VAE.transformer, tf_model.transformer, share_para=True)
-    init_para_frompretrained(VAE.encoder, tf_model.transformer, share_para=False)
+    init_para_frompretrained(VAE.transformer, tf_model.decoder, share_para=True)
+    init_para_frompretrained(VAE.encoder, tf_model.decoder, share_para=False)
     if args.learn_prior:
         init_para_frompretrained(VAE.encoder_prior, VAE.encoder, share_para=True)
         VAE.encoder_prior.averageSelfAttention.attention_weights = VAE.encoder.averageSelfAttention.attention_weights
