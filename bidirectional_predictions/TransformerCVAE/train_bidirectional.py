@@ -236,13 +236,15 @@ def main():
 
         # This computes a training step going from input to output and computes the losses
         # NORMAL LOSS, Prompt -> Story
-        loss_forward, ce_loss_forward, kl_loss_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+        loss_forward, ce_loss_forward, kl_loss_forward = 0, 0, 0
+        loss_backward, ce_loss_backward, kl_loss_backward = 0, 0, 0
+        """loss_forward, ce_loss_forward, kl_loss_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
             input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)[-1]
 
         # PROMPT LEVEL LOSS, Story -> Prompt
         loss_backward, ce_loss_backward, kl_loss_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
             target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)[-1]
-
+"""
         # BIDIRECTIONAL LOSSES
 
         # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B

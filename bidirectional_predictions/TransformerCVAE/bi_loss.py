@@ -64,12 +64,12 @@ def bidirectional_loss(loss_type, VAE, optimizer, y_mask, y_tokens, mask, loss_f
         assert(len(y_sentence_encodings) == len(y_sentence_masks))
 
         # This runs the bidirectional training on the different levels
-        if loss_type == "previous_sentence":
+        """if loss_type == "previous_sentence":
             return find_loss_bidirectional_two_sentences(y_sentence_encodings, y_sentence_masks, VAE, optimizer,
                 mask, loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens)
         elif loss_type == "all_previous_sentences":
             return find_loss_bidirectional_all_previous_sentences(y_sentence_encodings, y_sentence_masks, VAE, optimizer,
-                mask, loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens)
+                mask, loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens)"""
 
 
 def find_loss_bidirectional_two_sentences(y_sentence_encodings, y_sentence_masks,
