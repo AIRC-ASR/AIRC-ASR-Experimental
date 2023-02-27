@@ -7,41 +7,52 @@ import torch.nn.functional as F
 
 
 # NOTE: This is the bidirectional running of the program
-def get_sentence_encodings_and_masks(y_tokens, y_mask, tokenizer, curr_batch_size, curr_seq_len):
+def get_sentence_encodings_and_masks(tokens, mask, tokenizer, curr_batch_size, curr_seq_len):
     '''This function takes the y_tokens and y_mask and returns the sentence encodings and masks.'''
     # This decodes each sentence of each story from input IDs to text and splits it into sentences
-    y_tokens_text = tokenizer.decode(y_tokens[0, :][y_mask[0, :] == 1].tolist())
-    y_sentences = y_tokens_text.split('.')
+    tokens_text = tokenizer.decode(tokens[0, :][mask[0, :] == 1].tolist())
+    sentences = tokens_text.split('.')
 
     # Shape: (number of stories, number of sentences, max sentence length)
     # Creates a tensor of zeros with the shape of the number of stories, number of sentences, and max sentence length
     # Each sentence is encoded (text maps to input IDs (integers)) and the mask is created (all ones for each character)
     with torch.no_grad():
-        y_sentence_encodings = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len), dtype=torch.long).to(Device.device)
-        y_sentence_masks = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len), dtype=torch.long).to(Device.device)
-    assert(len(y_sentence_encodings) == len(y_sentence_masks))
+        sentence_encodings = torch.zeros((curr_batch_size, len(sentences), curr_seq_len), dtype=torch.long).to(Device.device)
+        sentence_masks = torch.zeros((curr_batch_size, len(sentences), curr_seq_len), dtype=torch.long).to(Device.device)
+        sentence_directions = torch.zeros((curr_batch_size, len(sentences), 1), dtype=torch.int).to(Device.device)
+    assert(len(sentence_encodings) == len(sentence_masks))
 
     # Since the bidirectional loss of each story is independent of the others, we can use multithreading to speed up the process
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
         # use a partial and map to run the function on all the sentences for all batches
         partial_get_sentence_encoding_and_mask = partial(get_sentence_encoding_and_mask, tokenizer=tokenizer)
-        results = executor.map(partial_get_sentence_encoding_and_mask, y_sentences)
+        results = executor.map(partial_get_sentence_encoding_and_mask, sentences)
 
         # This loop takes the results from the multithreading and puts them into the tensor
         for i, result in enumerate(results):
-            y_sentence_encodings[:, i, :len(result[0])] = torch.tensor(result[0], dtype=torch.long)
-            y_sentence_masks[:, i, :len(result[1])] = result[1]
+            sentence_encodings[:, i, :len(result[0])] = torch.tensor(result[0], dtype=torch.long)
+            sentence_masks[:, i, :len(result[1])] = result[1]
+            sentence_directions[:, i] = result[2]
 
-    return y_sentence_encodings, y_sentence_masks
+    return sentence_encodings, sentence_masks, sentence_directions
 
 def get_sentence_encoding_and_mask(sentence, tokenizer):
     '''This function takes a sentence and returns the encoding and mask.'''
     sentence_encoding = tokenizer.encode(sentence + '.')
+    sentence_direction = 0
+    dir_idx = sentence.find("</")
+    if dir_idx != -1:
+        special_token = sentence[dir_idx+2: sentence.find("/>")]
+        if special_token == 'SFWD':
+            sentence_direction = 1
+        elif special_token == 'SBKWD':
+            sentence_direction = 2
+  
     with torch.no_grad():
         sentence_mask = torch.ones(len(sentence_encoding), dtype=torch.long).to(Device.device)
     assert(len(sentence_encoding) == len(sentence_mask))
 
-    return sentence_encoding, sentence_mask
+    return sentence_encoding, sentence_mask, sentence_direction
 
 def bidirectional_loss(loss_type, VAE, optimizer, y_mask, y_tokens, mask, loss_fn,
     beta, model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens):
@@ -53,14 +64,8 @@ def bidirectional_loss(loss_type, VAE, optimizer, y_mask, y_tokens, mask, loss_f
         All other arguments are the same as train_step()
         '''
         # This gets the sentence encodings and masks for a batch of stories
-        y_sentence_encodings, y_sentence_masks = get_sentence_encodings_and_masks(y_tokens, y_mask, tokenizer, curr_batch_size, curr_seq_len)
-        try:
-            sent_len = len(y_sentence_encodings[0])
-            if sent_len > 1:
-                print("Encodings A:", tokenizer.decode(y_sentence_encodings[0][sent_len-1]))
-                print("Encodings B:", tokenizer.decode(y_sentence_encodings[0][sent_len-2]))
-        except:
-            print("could not show sentence encodings")
+        y_sentence_encodings, y_sentence_masks, y_sentence_directions = get_sentence_encodings_and_masks(y_tokens, y_mask, tokenizer, curr_batch_size, curr_seq_len)
+
         assert(len(y_sentence_encodings) == len(y_sentence_masks))
 
         if loss_type == "previous_sentence":

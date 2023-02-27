@@ -134,8 +134,8 @@ def main():
 
     # add special tokens
     special_tokens = {
-        'sentence_fwd': '<SFWD>',
-        'sentence_bkwd': '<SBKWD>'
+        'sentence_fwd': '</SFWD/>',
+        'sentence_bkwd': '</SBKWD/>'
     }
     # special_tokens_dict = {
     #     'pad_token': '<|startoftext|>',
@@ -233,6 +233,20 @@ def main():
 
     def calculate_loss(x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask):
         '''Calculates the loss of the model forward, backward, and for the sentence combinations'''
+        
+        # BIDIRECTIONAL LOSSES
+
+        # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
+        previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, y_mask,
+            y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+        (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
+        total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
+
+        # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
+        all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, y_mask,
+            y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+        (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, 
+        total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
 
         # This computes a training step going from input to output and computes the losses
         # NORMAL LOSS, Prompt -> Story
@@ -243,21 +257,7 @@ def main():
 
         # PROMPT LEVEL LOSS, Story -> Prompt
         loss_backward, ce_loss_backward, kl_loss_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
-            target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)[-1]
-"""
-        # BIDIRECTIONAL LOSSES
-
-        # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
-        previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, x_mask,
-            x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
-        (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
-        total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
-
-        # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
-        all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, x_mask,
-            x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
-        (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, 
-        total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
+            target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)[-1]"""
 
         # TOTAL LOSSES
         loss = (args.fwd_loss_weight*loss_forward) + (args.bkwd_loss_weight*loss_backward) + \
