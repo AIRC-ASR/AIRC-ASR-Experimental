@@ -59,7 +59,7 @@ def bidirectional_loss(loss_type, VAE, optimizer, y_mask, y_tokens, mask, loss_f
         # This runs the bidirectional training on the different levels
         if loss_type == "previous_sentence":
             try:
-                return bidirectional_two_sentences(VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask, loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens)
+                return bidirectional_two_sentences(VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask, loss_fn, beta, model_type, curr_seq_len, input_tokens)
             except RuntimeError as e:
                 print(e)
                 raise("RuntimeError: bidirectional_two_sentences()")
@@ -121,7 +121,7 @@ def bidirectional_all_previous_sentences(VAE, optimizer, y_sentence_encodings, y
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def bidirectional_two_sentences(VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask, 
-                                loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens):
+                                loss_fn, beta, model_type, curr_seq_len, input_tokens):
     '''This function finds the loss for the bidirectional training of the previous sentence.'''
     # Compute the number of pairwise comparisons to be made
     num_pairs = y_sentence_encodings.shape[0]
@@ -155,21 +155,10 @@ def bidirectional_two_sentences(VAE, optimizer, y_sentence_encodings, y_sentence
         # Wait for all the threads to finish and get the results
         results = [f.result() for f in as_completed(futures)]
 
-    # Sum the losses across all pairs
-    total_loss_sentence_b_a = sum(r[0] for r in results)
-    total_loss_sentence_a_b = sum(r[1] for r in results)
-    total_ce_loss_sentence_b_a = sum(r[2] for r in results)
-    total_ce_loss_sentence_a_b = sum(r[3] for r in results)
-    total_kl_loss_sentence_b_a = sum(r[4] for r in results)
-    total_kl_loss_sentence_a_b = sum(r[5] for r in results)
-
-    # Normalize the losses by the number of pairs
-    total_loss_sentence_b_a /= num_pairs
-    total_loss_sentence_a_b /= num_pairs
-    total_ce_loss_sentence_b_a /= num_pairs
-    total_ce_loss_sentence_a_b /= num_pairs
-    total_kl_loss_sentence_b_a /= num_pairs
-    total_kl_loss_sentence_a_b /= num_pairs
+    # Sum the losses and normalize the losses for all the pairs
+    losses = [sum(r[i] for r in results) / num_pairs for i in range(len(results[0]))]
+    total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a, \
+        total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b = losses
 
     # Return the total losses
     return (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
