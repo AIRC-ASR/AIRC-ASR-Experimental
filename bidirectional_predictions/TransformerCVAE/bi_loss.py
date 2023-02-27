@@ -54,6 +54,13 @@ def bidirectional_loss(loss_type, VAE, optimizer, y_mask, y_tokens, mask, loss_f
         '''
         # This gets the sentence encodings and masks for a batch of stories
         y_sentence_encodings, y_sentence_masks = get_sentence_encodings_and_masks(y_tokens, y_mask, tokenizer, curr_batch_size, curr_seq_len)
+        try:
+            sent_len = len(y_sentence_encodings[0])
+            if sent_len > 1:
+                print("Encodings A:", tokenizer.decode(y_sentence_encodings[0][sent_len-1]))
+                print("Encodings B:", tokenizer.decode(y_sentence_encodings[0][sent_len-2]))
+        except:
+            print("could not show sentence encodings")
         assert(len(y_sentence_encodings) == len(y_sentence_masks))
 
         # This runs the bidirectional training on the different levels

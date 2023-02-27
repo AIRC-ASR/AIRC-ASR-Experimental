@@ -73,10 +73,10 @@ def main():
 
     # Loss weighting args
     parser.add_argument('--fwd_loss_weight', type=float, default=1, help="Weight multiplier for forward loss.")
-    parser.add_argument('--bkwd_loss_weight', type=float, default=1, help="Weight multiplier for backward loss.")
-    parser.add_argument('--fwd_sentence_loss_weight', type=float, default=1, help="Weight multiplier for forward sentence loss (A -> B).")
-    parser.add_argument('--bkwd_sentence_loss_weight', type=float, default=1, help="Weight multiplier for forward backward loss (B -> A).")
-    parser.add_argument('--all_sentence_loss_weight', type=float, default=1, help="Weight multiplier for all previous sentence loss (0 to A -> B).")
+    parser.add_argument('--bkwd_loss_weight', type=float, default=0, help="Weight multiplier for backward loss.")
+    parser.add_argument('--fwd_sentence_loss_weight', type=float, default=0, help="Weight multiplier for forward sentence loss (A -> B).")
+    parser.add_argument('--bkwd_sentence_loss_weight', type=float, default=0, help="Weight multiplier for forward backward loss (B -> A).")
+    parser.add_argument('--all_sentence_loss_weight', type=float, default=0, help="Weight multiplier for all previous sentence loss (0 to A -> B).")
 
     # NOTE: Use for changing the arguments of the program
     args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 20000 --switch-time 0.5 '
@@ -133,6 +133,10 @@ def main():
     config.n_ctx = 1024
 
     # add special tokens
+    special_tokens = {
+        'sentence_fwd': '<SFWD>',
+        'sentence_bkwd': '<SBKWD>'
+    }
     # special_tokens_dict = {
     #     'pad_token': '<|startoftext|>',
     #     'cls_token': '<|startofcond|>',
@@ -140,7 +144,7 @@ def main():
     #     'mask_token': '<|endofcond|>'
     # }
     # num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
-    # logger.info('We have added', num_added_toks, 'special tokens')
+    logger.info('We have added', len(special_tokens), 'special tokens')
     # # Notice: resize_token_embeddings expect to receive the full size of the new vocab
     # gpt2_model.resize_token_embeddings(len(tokenizer))
     # assert tokenizer.pad_token == '<|startoftext|>'
@@ -222,9 +226,9 @@ def main():
 
         logger.info("Measuring Input distribution...")
         plot_input_distribution(VAE, tokenizer, args.model_type, test_loader, args.dataset, num_iters, save_folder)
-        logger.info("Val Setp...")
+        logger.info("Validation Step...")
         validate_step(VAE, tokenizer, args.model_type, val_loader, num_iters, max_val_batches, loss_fn, save_folder)
-        logger.info("Generate...")
+        logger.info("Generate output samples...")
         generate_samples(VAE, tokenizer, args, test_loader, num_iters, save_folder)
 
     def calculate_loss(x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask):
