@@ -223,7 +223,7 @@ def main():
         logger.info("Measuring Input distribution...")
         plot_input_distribution(VAE, tokenizer, args.model_type, test_loader, args.dataset, num_iters, save_folder)
         logger.info("Val Setup...")
-        validate_step(VAE, tokenizer, args.model_type, val_loader, num_iters, max_val_batches, loss_fn, save_folder)
+        # validate_step(VAE, tokenizer, args.model_type, val_loader, num_iters, max_val_batches, loss_fn, save_folder)
         logger.info("Generate...")
         generate_samples(VAE, tokenizer, args, test_loader, num_iters, save_folder)
 
@@ -242,16 +242,17 @@ def main():
         # BIDIRECTIONAL LOSSES
 
         # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
-        previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, x_mask,
-            x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+        previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, y_mask,
+            y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
         (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
         total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
+        print('previous_sentence_loss_output', previous_sentence_loss_output)
 
         # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
-        all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, x_mask,
-            x_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
-        (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, 
-        total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
+        all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, y_mask,
+            y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+        print('all_previous_sentences_loss_output', all_previous_sentences_loss_output)
+        (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
 
         # TOTAL LOSSES
         print("args.fwd_loss_weight*loss_forward", args.fwd_loss_weight, loss_forward, args.fwd_loss_weight*loss_forward)

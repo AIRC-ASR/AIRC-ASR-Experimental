@@ -17,8 +17,8 @@ def get_sentence_encodings_and_masks(y_tokens, y_mask, tokenizer, curr_batch_siz
     # Creates a tensor of zeros with the shape of the number of stories, number of sentences, and max sentence length
     # Each sentence is encoded (text maps to input IDs (integers)) and the mask is created (all ones for each character)
     with torch.no_grad():
-        y_sentence_encodings = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len), dtype=torch.long).to(Device.device)
-        y_sentence_masks = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len), dtype=torch.long).to(Device.device)
+        y_sentence_encodings = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len - 1), dtype=torch.long).to(Device.device)
+        y_sentence_masks = torch.zeros((curr_batch_size, len(y_sentences), curr_seq_len - 1), dtype=torch.long).to(Device.device)
     assert(len(y_sentence_encodings) == len(y_sentence_masks))
 
     # Since the bidirectional loss of each story is independent of the others, we can use multithreading to speed up the process
@@ -58,102 +58,24 @@ def bidirectional_loss(loss_type, VAE, optimizer, y_mask, y_tokens, mask, loss_f
 
         # This runs the bidirectional training on the different levels
         if loss_type == "previous_sentence":
-            return find_loss_bidirectional_two_sentences(y_sentence_encodings, y_sentence_masks, VAE, optimizer,
-                mask, loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens)
+            try:
+                return bidirectional_two_sentences(VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask, loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens)
+            except RuntimeError as e:
+                print(e)
+                print("RuntimeError: bidirectional_two_sentences()")
+                return 0, 0, 0, 0, 0, 0
         elif loss_type == "all_previous_sentences":
-            return find_loss_bidirectional_all_previous_sentences(y_sentence_encodings, y_sentence_masks, VAE, optimizer,
-                mask, loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens)
+            try:
+               result = bidirectional_all_previous_sentences(VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask, loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens)
+               print('result', result)
+               return result
+            except RuntimeError as e:
+                print(e)
+                print("RuntimeError: bidirectional_all_previous_sentences()")
+                return 0, 0, 0, 0, 0, 0
 
 
-def find_loss_bidirectional_two_sentences(y_sentence_encodings, y_sentence_masks,
-        VAE, optimizer, mask, loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens):
-    '''This function finds the loss for the bidirectional training of the previous sentence.
-    So if the latest sentence is "I am a cat.", then the previous sentence is "I am a dog." and vice versa.'''
-    total_loss_sentence_b_a = 0
-    total_loss_sentence_a_b = 0
-    total_ce_loss_sentence_b_a = 0
-    total_ce_loss_sentence_a_b = 0
-    total_kl_loss_sentence_b_a = 0
-    total_kl_loss_sentence_a_b = 0
-
-    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-        # use a partial and map to run the function on all the sentences for all batches
-        partial_bidirectional_two_sentences = partial(bidirectional_two_sentences, VAE=VAE, optimizer=optimizer,
-            y_sentence_encodings=y_sentence_encodings, y_sentence_masks=y_sentence_masks, mask=mask,
-            loss_fn=loss_fn, beta=beta, model_type=model_type, curr_batch_size=curr_batch_size, curr_seq_len=curr_seq_len, input_tokens=input_tokens
-        )
-        try:
-            results = executor.map(partial_bidirectional_two_sentences, range(len(y_sentence_encodings)))
-        except RuntimeError as e:
-            print(e)
-            print("RuntimeError: find_loss_bidirectional_two_sentences()")
-            return (
-                total_loss_sentence_b_a,
-                total_loss_sentence_a_b,
-                total_ce_loss_sentence_b_a,
-                total_ce_loss_sentence_a_b,
-                total_kl_loss_sentence_b_a,
-                total_kl_loss_sentence_a_b
-            )
-
-        # This loop takes the results from the multithreading and sums the losses for each batch
-        for result in results:
-            total_loss_sentence_b_a += result[0]
-            total_loss_sentence_a_b += result[1]
-            total_ce_loss_sentence_b_a += result[2]
-            total_ce_loss_sentence_a_b += result[3]
-            total_kl_loss_sentence_b_a += result[4]
-            total_kl_loss_sentence_a_b += result[5]
-
-    return (
-        total_loss_sentence_b_a,
-        total_loss_sentence_a_b,
-        total_ce_loss_sentence_b_a,
-        total_ce_loss_sentence_a_b,
-        total_kl_loss_sentence_b_a,
-        total_kl_loss_sentence_a_b
-    )
-
-
-def find_loss_bidirectional_all_previous_sentences(y_sentence_encodings, y_sentence_masks,
-        VAE, optimizer, mask, loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens):
-    '''This function finds the loss for the bidirectional training on all previous sentences.
-    So if the sentence is the 3rd sentence in the story, it will predict the first two sentences and vice versa.'''
-    total_loss_all_previous_sentences = 0
-    total_ce_loss_all_previous_sentences = 0
-    total_kl_loss_sentence_all_previous_sentences = 0
-
-    mask = torch.ones((1, curr_seq_len), dtype=torch.long).to(Device.device)
-    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-        # use a partial and map to run the function on all the sentences for all batches
-        partial_bidirectional_all_previous_sentences = partial(bidirectional_all_previous_sentences, VAE=VAE, optimizer=optimizer,
-            y_sentence_encodings=y_sentence_encodings, y_sentence_masks=y_sentence_masks, mask=mask,
-            loss_fn=loss_fn, beta=beta, model_type=model_type, curr_batch_size=curr_batch_size, curr_seq_len=curr_seq_len, input_tokens=input_tokens
-        )
-        try:
-            results = executor.map(partial_bidirectional_all_previous_sentences, range(len(y_sentence_encodings)))
-        except RuntimeError as e:
-            print(e)
-            print("RuntimeError: find_loss_bidirectional_all_previous_sentences()")
-            return (
-                total_loss_all_previous_sentences,
-                total_ce_loss_all_previous_sentences,
-                total_kl_loss_sentence_all_previous_sentences
-            )
-
-        # This loop takes the results from the multithreading and sums the losses for each batch
-        for result in results:
-            total_loss_all_previous_sentences += result[0]
-            total_ce_loss_all_previous_sentences += result[1]
-            total_kl_loss_sentence_all_previous_sentences += result[2]
-
-    return (
-        total_loss_all_previous_sentences,
-        total_ce_loss_all_previous_sentences,
-        total_kl_loss_sentence_all_previous_sentences,
-    )
-
-def bidirectional_all_previous_sentences(idx, VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask,
+def bidirectional_all_previous_sentences(VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask,
         loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens):
     '''This function finds the loss for the bidirectional training on all previous sentences.
     So if the sentence is the 3rd sentence in the story, it will predict the first two sentences and vice versa.'''
@@ -165,8 +87,8 @@ def bidirectional_all_previous_sentences(idx, VAE, optimizer, y_sentence_encodin
         with torch.no_grad():
             prev_encodings = torch.zeros((1, curr_seq_len), dtype=torch.long).to(Device.device)
             prev_masks = torch.zeros((1, curr_seq_len), dtype=torch.long).to(Device.device)
-        for idx in range(len(y_sentence_encodings[batch_idx])):
-            y_sentence_encoding = y_sentence_encodings[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
+        for idx in range(len(y_sentence_encodings[batch_idx])): # [1, 38, 1024]
+            y_sentence_encoding = y_sentence_encodings[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0) # [1, 1023]
             y_sentence_mask = y_sentence_masks[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
             assert(y_sentence_encoding.shape[1] == y_sentence_mask.shape[1])
 
@@ -178,10 +100,12 @@ def bidirectional_all_previous_sentences(idx, VAE, optimizer, y_sentence_encodin
                 assert(y_sentence_encoding_padded.shape[1] == y_sentence_mask_padded.shape[1])
 
                 # SENTENCE LEVEL LOSS, Sentence B -> All Previous Sentences
+                print('SHAPES', y_sentence_encoding_padded.shape, y_sentence_mask_padded.shape, prev_encodings.shape, prev_masks.shape)
                 output_all_previous_sentences = train_step(VAE, optimizer, y_sentence_mask_padded,
                     y_sentence_encoding_padded, prev_encodings, prev_masks,
                     y_sentence_encoding_padded, prev_encodings, mask, loss_fn, beta, model_type
                 )
+                print('output_all_previous_sentences', output_all_previous_sentences)
 
                 loss_all_previous_sentences, ce_loss_all_previous_sentences, kl_loss_sentence_all_previous_sentences = output_all_previous_sentences[-1]
                 total_loss_all_previous_sentences += loss_all_previous_sentences
@@ -198,7 +122,8 @@ def bidirectional_all_previous_sentences(idx, VAE, optimizer, y_sentence_encodin
         total_kl_loss_sentence_all_previous_sentences,
     )
 
-def bidirectional_two_sentences(idx, VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask, 
+
+def bidirectional_two_sentences(VAE, optimizer, y_sentence_encodings, y_sentence_masks, mask, 
         loss_fn, beta, model_type, curr_batch_size, curr_seq_len, input_tokens):
     '''This function finds the loss for the bidirectional training of the previous sentence.'''
     total_loss_sentence_b_a = 0
@@ -220,6 +145,7 @@ def bidirectional_two_sentences(idx, VAE, optimizer, y_sentence_encodings, y_sen
             assert(y_sentence_encoding_b.shape[1] == y_sentence_mask_b.shape[1])
 
             # SENTENCE LEVEL LOSS, Sentence B -> Sentence A
+            print('BETTER SHAPES', y_sentence_encoding_b.shape, y_sentence_mask_b.shape, y_sentence_encoding_a.shape, y_sentence_mask_a.shape)
             output_sentence_b_a = train_step(VAE, optimizer, y_sentence_encoding_b, y_sentence_mask_b, y_sentence_encoding_a, y_sentence_mask_a,
                     y_sentence_encoding_b, y_sentence_encoding_a, mask, loss_fn, beta, model_type)
             loss_sentence_b_a, ce_loss_sentence_b_a, kl_loss_sentence_b_a = output_sentence_b_a[-1]
@@ -244,5 +170,5 @@ def bidirectional_two_sentences(idx, VAE, optimizer, y_sentence_encodings, y_sen
         total_ce_loss_sentence_b_a,
         total_ce_loss_sentence_a_b,
         total_kl_loss_sentence_b_a,
-        total_kl_loss_sentence_a_b
+        total_kl_loss_sentence_a_b,
     )
