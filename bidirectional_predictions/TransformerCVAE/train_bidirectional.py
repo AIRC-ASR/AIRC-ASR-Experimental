@@ -81,8 +81,8 @@ def main():
     args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
                              '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
                              '--short_seq_len 1024 --long_seq_len 1024 '
-                             '--fwd_loss_weight 0.25 --bkwd_loss_weight 0.25 --all_sentence_loss_weight 0.25 '
-                             '--prompt_loss_weight 0.25'.split())
+                             '--fwd_loss_weight 0.5 --bkwd_loss_weight 0.5 --all_sentence_loss_weight 0.0 '
+                             '--prompt_loss_weight 0.0'.split())
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -232,34 +232,40 @@ def main():
 
         # This computes a training step going from input to output and computes the losses
         # NORMAL LOSS, Prompt -> Story
-        loss_forward, ce_loss_forward, kl_loss_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-            input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)[-1]
+        if args.fwd_loss_weight > 0:
+            loss_forward, ce_loss_forward, kl_loss_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+                input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)[-1]
+        else:
+            loss_forward, ce_loss_forward, kl_loss_forward = 0, 0, 0
 
         # PROMPT LEVEL LOSS, Story -> Prompt
-        loss_prompt_backward, ce_loss_prompt_backward, kl_loss_prompt_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
-            target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)[-1]
+        if args.prompt_loss_weight > 0:
+            loss_prompt_backward, ce_loss_prompt_backward, kl_loss_prompt_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
+                target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)[-1]
+        else:
+            loss_prompt_backward, ce_loss_prompt_backward, kl_loss_prompt_backward = 0, 0, 0
 
         # BIDIRECTIONAL LOSSES
 
         # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
-        previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, y_mask,
-            y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
-        (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
-        total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
-        print('previous_sentence_loss_output', previous_sentence_loss_output)
-
+        if args.bkwd_loss_weight > 0:
+            previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, y_mask,
+                y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+            (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
+            total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
+            print('previous_sentence_loss_output', previous_sentence_loss_output)
+        else:
+            total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a, total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b = 0, 0, 0, 0, 0, 0
+        
         # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
-        all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, y_mask,
-            y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
-        print('all_previous_sentences_loss_output', all_previous_sentences_loss_output)
-        (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
+        if args.all_sentence_loss_weight > 0:
+            all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, y_mask,
+                y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+            (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
+        else:
+            total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_all_previous_sentences = 0, 0, 0
 
         # TOTAL LOSSES
-        print("args.fwd_loss_weight*loss_forward", args.fwd_loss_weight, loss_forward, args.fwd_loss_weight*loss_forward)
-        print("args.prompt_loss_weight*loss_prompt_backward", args.prompt_loss_weight*loss_prompt_backward)
-        print("args.bkwd_loss_weight*total_loss_sentence_b_a", args.bkwd_loss_weight, total_loss_sentence_b_a, args.bkwd_loss_weight*total_loss_sentence_b_a)
-        print("args.bkwd_loss_weight*total_loss_sentence_a_b", args.bkwd_loss_weight*total_loss_sentence_a_b)
-        print("args.all_sentence_loss_weight*total_loss_all_previous_sentences", args.all_sentence_loss_weight*total_loss_all_previous_sentences)
         loss = (args.fwd_loss_weight*loss_forward) + (args.prompt_loss_weight*loss_prompt_backward) + \
             (args.bkwd_loss_weight*total_loss_sentence_b_a) + \
             (args.bkwd_loss_weight*total_loss_sentence_a_b) + (args.all_sentence_loss_weight*total_loss_all_previous_sentences)
