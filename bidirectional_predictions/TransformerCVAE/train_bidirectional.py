@@ -274,7 +274,7 @@ def main():
 
         return loss, ce_loss, kl_loss
 
-    eval_step()
+    # eval_step()
     torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}' + '.pt'))
 
     e = 0

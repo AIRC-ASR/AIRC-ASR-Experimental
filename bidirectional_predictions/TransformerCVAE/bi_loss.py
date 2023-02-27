@@ -63,7 +63,10 @@ def bidirectional_loss(loss_type, VAE, optimizer, y_mask, y_tokens, mask, loss_f
             print("could not show sentence encodings")
         assert(len(y_sentence_encodings) == len(y_sentence_masks))
 
-        return 0, 0, 0, 0, 0, 0
+        if loss_type == "previous_sentence":
+            return 0, 0, 0, 0, 0, 0
+        elif loss_type == "all_previous_sentences":
+            return 0, 0, 0
 
         # This runs the bidirectional training on the different levels
         """if loss_type == "previous_sentence":
