@@ -252,12 +252,12 @@ def main():
         # NORMAL LOSS, Prompt -> Story
         loss_forward, ce_loss_forward, kl_loss_forward = 0, 0, 0
         loss_backward, ce_loss_backward, kl_loss_backward = 0, 0, 0
-        """loss_forward, ce_loss_forward, kl_loss_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+        loss_forward, ce_loss_forward, kl_loss_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
             input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)[-1]
 
         # PROMPT LEVEL LOSS, Story -> Prompt
         loss_backward, ce_loss_backward, kl_loss_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
-            target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)[-1]"""
+            target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)[-1]
 
         # TOTAL LOSSES
         loss = (args.fwd_loss_weight*loss_forward) + (args.bkwd_loss_weight*loss_backward) + \

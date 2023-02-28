@@ -1,5 +1,5 @@
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as functional
 from torch.cuda import amp
 from data.util import *
 from util import *
@@ -31,8 +31,7 @@ def compute_loss(model, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target
     y_mask = y_mask.to(Device.device)
     y_tokens = y_tokens.to(Device.device)
 
-    outputs = model(input_ids=input_tokens, attention_mask=mask, x_mask=x_mask, x_tokens=x_tokens, y_mask=y_mask,
-                    y_tokens=y_tokens)
+    outputs = model(input_ids=input_tokens, attention_mask=mask, x_mask=x_mask, x_tokens=x_tokens, y_mask=y_mask, y_tokens=y_tokens)
     logits = outputs[0]
     kl_loss = outputs[-1]
     num_logits = logits.size(-1)
@@ -120,7 +119,7 @@ def top_k_top_p_filtering(logits, top_k=100, top_p=0.95, filter_value=-float('In
 
     if top_p > 0.0:
         sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+        cumulative_probs = torch.cumsum(functional.softmax(sorted_logits, dim=-1), dim=-1)
 
         # Remove tokens with cumulative probability above the threshold
         sorted_indices_to_remove = cumulative_probs > top_p
