@@ -81,7 +81,7 @@ def main():
     args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
                              '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
                              '--short_seq_len 1024 --long_seq_len 1024 '
-                             '--fwd_loss_weight 0.5 --bkwd_loss_weight 0.0 --all_sentence_loss_weight 0.5 '
+                             '--fwd_loss_weight 0.5 --bkwd_loss_weight 0.5 --all_sentence_loss_weight 0.0 '
                              '--prompt_loss_weight 0.0'.split())
 
     if args.model_type == 'cvae':
@@ -223,7 +223,7 @@ def main():
         logger.info("Measuring Input distribution...")
         plot_input_distribution(VAE, tokenizer, args.model_type, test_loader, args.dataset, num_iters, save_folder)
         logger.info("Val Setup...")
-        # validate_step(VAE, tokenizer, args.model_type, val_loader, num_iters, max_val_batches, loss_fn, save_folder)
+        validate_step(VAE, tokenizer, args.model_type, val_loader, num_iters, max_val_batches, loss_fn, save_folder)
         logger.info("Generate...")
         generate_samples(VAE, tokenizer, args, test_loader, num_iters, save_folder)
 
