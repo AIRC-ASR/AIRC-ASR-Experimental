@@ -73,16 +73,16 @@ def main():
 
     # Loss weighting args
     parser.add_argument('--fwd_loss_weight', type=float, default=1, help="Weight multiplier for forward loss.")
-    parser.add_argument('--bkwd_loss_weight', type=float, default=0, help="Weight multiplier for backward loss.")
-    parser.add_argument('--fwd_sentence_loss_weight', type=float, default=0, help="Weight multiplier for forward sentence loss (A -> B).")
-    parser.add_argument('--bkwd_sentence_loss_weight', type=float, default=0, help="Weight multiplier for forward backward loss (B -> A).")
-    parser.add_argument('--all_sentence_loss_weight', type=float, default=0, help="Weight multiplier for all previous sentence loss (0 to A -> B).")
+    parser.add_argument('--bkwd_loss_weight', type=float, default=1, help="Weight multiplier for backward loss.")
+    parser.add_argument('--all_sentence_loss_weight', type=float, default=1, help="Weight multiplier for all previous sentence loss (0 to A -> B).")
+    parser.add_argument('--prompt_loss_weight', type=float, default=1, help="Weight multiplier for backward prompt loss.")
 
     # NOTE: Use for changing the arguments of the program
-    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 20000 --switch-time 0.5 '
+    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
                              '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
                              '--short_seq_len 1024 --long_seq_len 1024 '
-                             '--fwd_loss_weight 1.0 --bkwd_sentence_loss_weight 0 --all_sentence_loss_weight 0'.split())
+                             '--fwd_loss_weight 0.5 --bkwd_loss_weight 0.5 --all_sentence_loss_weight 0.0 '
+                             '--prompt_loss_weight 0.0'.split())
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -250,32 +250,60 @@ def main():
 
         # This computes a training step going from input to output and computes the losses
         # NORMAL LOSS, Prompt -> Story
-        loss_forward, ce_loss_forward, kl_loss_forward = 0, 0, 0
-        loss_backward, ce_loss_backward, kl_loss_backward = 0, 0, 0
-        loss_forward, ce_loss_forward, kl_loss_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
-            input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)[-1]
+        if args.fwd_loss_weight > 0:
+            loss_forward, ce_loss_forward, kl_loss_forward = train_step(VAE, optimizer, x_mask, x_tokens, y_mask, y_tokens,
+                input_tokens, target_tokens, mask, loss_fn, beta, args.model_type)[-1]
+        else:
+            loss_forward, ce_loss_forward, kl_loss_forward = 0, 0, 0
 
         # PROMPT LEVEL LOSS, Story -> Prompt
-        loss_backward, ce_loss_backward, kl_loss_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
-            target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)[-1]
+        if args.prompt_loss_weight > 0:
+            loss_prompt_backward, ce_loss_prompt_backward, kl_loss_prompt_backward = train_step(VAE, optimizer, y_mask, y_tokens, x_mask, x_tokens,
+                target_tokens, input_tokens, mask, loss_fn, beta, args.model_type)[-1]
+        else:
+            loss_prompt_backward, ce_loss_prompt_backward, kl_loss_prompt_backward = 0, 0, 0
+
+        # BIDIRECTIONAL LOSSES
+
+        # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
+        if args.bkwd_loss_weight > 0:
+            previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, y_mask,
+                y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+            (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
+            total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
+            print('previous_sentence_loss_output', previous_sentence_loss_output)
+        else:
+            total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a, total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b = 0, 0, 0, 0, 0, 0
+        
+        # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
+        if args.all_sentence_loss_weight > 0:
+            all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, y_mask,
+                y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+            (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
+            print('all_previous_sentences_loss_output', all_previous_sentences_loss_output)
+        else:
+            total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_all_previous_sentences = 0, 0, 0
 
         # TOTAL LOSSES
-        loss = (args.fwd_loss_weight*loss_forward) + (args.bkwd_loss_weight*loss_backward) + \
-            (args.bkwd_sentence_loss_weight*total_loss_sentence_b_a) + \
-            (args.fwd_sentence_loss_weight*total_loss_sentence_a_b) + (args.all_sentence_loss_weight*total_loss_all_previous_sentences)
+        loss = (args.fwd_loss_weight*loss_forward) + (args.prompt_loss_weight*loss_prompt_backward) + \
+            (args.bkwd_loss_weight*total_loss_sentence_b_a) + \
+            (args.bkwd_loss_weight*total_loss_sentence_a_b) + (args.all_sentence_loss_weight*total_loss_all_previous_sentences)
 
-        ce_loss = (args.fwd_loss_weight*ce_loss_forward) + (args.bkwd_loss_weight*ce_loss_backward) + \
-            (args.bkwd_sentence_loss_weight*total_ce_loss_sentence_b_a) + \
-            (args.fwd_sentence_loss_weight*total_ce_loss_sentence_a_b) + (args.all_sentence_loss_weight*total_ce_loss_all_previous_sentences)
+        ce_loss = (args.fwd_loss_weight*ce_loss_forward) + (args.prompt_loss_weight*ce_loss_prompt_backward) + \
+            (args.bkwd_loss_weight*total_ce_loss_sentence_b_a) + \
+            (args.bkwd_loss_weight*total_ce_loss_sentence_a_b) + (args.all_sentence_loss_weight*total_ce_loss_all_previous_sentences)
 
-        kl_loss = (args.fwd_loss_weight*kl_loss_forward) + (args.bkwd_loss_weight*kl_loss_backward) + \
-            (args.bkwd_sentence_loss_weight*total_kl_loss_sentence_b_a) + \
-            (args.fwd_sentence_loss_weight*total_kl_loss_sentence_a_b) + (args.all_sentence_loss_weight*total_kl_loss_all_previous_sentences)
+        kl_loss = (args.fwd_loss_weight*kl_loss_forward) + (args.prompt_loss_weight*kl_loss_prompt_backward) + \
+            (args.bkwd_loss_weight*total_kl_loss_sentence_b_a) + \
+            (args.bkwd_loss_weight*total_kl_loss_sentence_a_b) + (args.all_sentence_loss_weight*total_kl_loss_all_previous_sentences)
 
         return loss, ce_loss, kl_loss
 
-    # eval_step()
-    torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}' + '.pt'))
+    eval_step()
+    torch.save(VAE.state_dict(), os.path.join(save_folder,
+        'model_' + '{:07d}'.format(num_iters) +
+        f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt')
+    )
 
     e = 0
     while num_iters < args.iterations:
@@ -352,7 +380,10 @@ def main():
                     logger.info("Iteration completed: %d, remained %d" % (num_iters, args.iterations - num_iters))
                     logger.info("Saving model...")
                     logger.info('\n------------------------------------------------------')
-                    torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_' + '{:07d}'.format(num_iters) + '.pt'))
+                    torch.save(VAE.state_dict(), os.path.join(save_folder,
+                        'model_' + '{:07d}'.format(num_iters) +
+                        f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt')
+                    )
 
                 if args.switch_time > 0 and num_iters == int(args.iterations * args.switch_time):
                     logger.info("Switch to long sequence training")
@@ -371,7 +402,9 @@ def main():
             e += 1
             logger.info("Training loop. The ith epoch completed: %d" % e)
 
-    torch.save(VAE.state_dict(), os.path.join(save_folder, 'model_latest.pt'))
+    torch.save(VAE.state_dict(), os.path.join(save_folder,
+            'model_' + '{:07d}'.format(num_iters) +
+            f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt'))
     logger.info("Training complete.")
 
 

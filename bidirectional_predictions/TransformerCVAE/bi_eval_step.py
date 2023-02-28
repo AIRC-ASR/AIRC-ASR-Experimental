@@ -199,7 +199,9 @@ def plot_input_distribution(model, tokenizer, model_type, test_loader, dataset, 
             idx = [yl == l for yl in y]
             plt.scatter(X_emb_2d[idx, 0], X_emb_2d[idx, 1], c=cc[i], s=10, edgecolor='none', alpha=0.5)
         ax.axis('off')  # adding it will get no axis
-        plt.savefig(os.path.join(save_folder, 'tSNE_' + '{:07d}'.format(num_iters) + '.png'))
+        plt.savefig(os.path.join(save_folder,
+            'tSNE_' + '{:07d}'.format(num_iters) +
+            f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.png'))
         plt.close(fig)
     except:
         pass
