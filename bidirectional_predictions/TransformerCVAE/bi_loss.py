@@ -40,13 +40,13 @@ def get_sentence_encoding_and_mask(sentence, tokenizer):
     '''This function takes a sentence and returns the encoding and mask.'''
     sentence_encoding = tokenizer.encode(sentence + '.')
     sentence_direction = 0
-    """dir_idx = sentence.find("</")
+    dir_idx = sentence.find("</")
     if dir_idx != -1:
         special_token = sentence[dir_idx+2: sentence.find("/>")]
         if special_token == 'SFWD':
             sentence_direction = 1
         elif special_token == 'SBKWD':
-            sentence_direction = 2"""
+            sentence_direction = 2
   
     with torch.no_grad():
         sentence_mask = torch.ones(len(sentence_encoding), dtype=torch.long).to(Device.device)
