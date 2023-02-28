@@ -81,7 +81,7 @@ def main():
     args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
                              '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
                              '--short_seq_len 1024 --long_seq_len 1024 '
-                             '--fwd_loss_weight 0.5 --bkwd_loss_weight 0.5 --all_sentence_loss_weight 0.0 '
+                             '--fwd_loss_weight 0.5 --bkwd_loss_weight 0.0 --all_sentence_loss_weight 0.5 '
                              '--prompt_loss_weight 0.0'.split())
 
     if args.model_type == 'cvae':
@@ -262,6 +262,7 @@ def main():
             all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, y_mask,
                 y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
             (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
+            print('all_previous_sentences_loss_output', all_previous_sentences_loss_output)
         else:
             total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, total_kl_loss_all_previous_sentences = 0, 0, 0
 
