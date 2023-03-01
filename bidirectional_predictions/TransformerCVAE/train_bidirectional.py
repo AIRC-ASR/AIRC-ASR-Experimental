@@ -322,13 +322,7 @@ def main():
         logger.info('\n----------------------------------------------------------------------')
         logger.info("Training loop.       Batches: %d" % len(train_loader))
 
-    
-        first_iter_after_reload = True
         with tqdm(total=len(train_loader)) as pbar:
-            # Advance the progress bar to the end of the previous run
-            if args.load and first_iter_after_reload:
-                pbar.update(num_iters)
-                first_iter_after_reload = False
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:

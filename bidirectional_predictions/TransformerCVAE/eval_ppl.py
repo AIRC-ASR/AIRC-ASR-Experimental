@@ -97,7 +97,7 @@ def run_model():
 
     parser.add_argument('--learn_prior', action="store_true")
 
-    args = parser.parse_args('--model-path out/test/model_0025000_bidirectional_1.0_0.0_0.0_0.0.pt '
+    args = parser.parse_args('--model-path out/test/model_0050000_bidirectional_1.0_0.0_0.0_0.0.pt '
                              '--add_input --learn_prior'.split()) # --fp16
     print(args)
 
