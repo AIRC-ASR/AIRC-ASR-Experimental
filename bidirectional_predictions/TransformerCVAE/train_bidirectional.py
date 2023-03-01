@@ -76,13 +76,18 @@ def main():
     parser.add_argument('--bkwd_loss_weight', type=float, default=1, help="Weight multiplier for backward loss.")
     parser.add_argument('--all_sentence_loss_weight', type=float, default=1, help="Weight multiplier for all previous sentence loss (0 to A -> B).")
     parser.add_argument('--prompt_loss_weight', type=float, default=1, help="Weight multiplier for backward prompt loss.")
+    
+    # Reload args
+    parser.add_argument('--reload_path', type=str, default='')
+    parser.add_argument('--reload_iters', type=int, default=0)
 
     # NOTE: Use for changing the arguments of the program
-    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 1000 --switch-time 0.5 '
+    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 25000 --switch-time 0.5 '
                              '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
                              '--short_seq_len 1024 --long_seq_len 1024 '
-                             '--fwd_loss_weight 0.5 --bkwd_loss_weight 0.5 --all_sentence_loss_weight 0.0 '
-                             '--prompt_loss_weight 0.0'.split())
+                             '--fwd_loss_weight 1 --bkwd_loss_weight 0 --all_sentence_loss_weight 0.0 '
+                             '--prompt_loss_weight 0.0 '
+                             '--reload_path out/test/model_0025000_bidirectional_1.0_0.0_0.0_0.0.pt --reload_iters 25000'.split())
 
     if args.model_type == 'cvae':
         args.learn_prior = True
@@ -159,9 +164,10 @@ def main():
         # VAE.lm_head_rep = LM_head_rep(*gpt2_model.lm_head.weight.size()[::-1])
     logger.setLevel(logging.INFO)
     logger.info(f'VAE_params: {num_params(VAE)}')  # 286694400
+    args.load = args.reload_path
     if args.load:
         logger.info('Loading model weights...')
-        state = torch.load(os.path.join(args.load, 'model_latest.pt'), map_location=args.gpu if gpu else "cpu") # model_latest.pt
+        state = torch.load(os.path.join(args.load), map_location="cpu")
         if 'module' in list(state.keys())[0]:  # model_path is data parallel model with attr 'module'
             state_copy = copy.copy(state)
             keys = state_copy.keys()
@@ -213,7 +219,28 @@ def main():
     max_val_batches = 20000  # max num. of val batches
     logger.info("Total iteration: %d" % args.iterations)
     e = 0  # number of epoch
-    num_iters = 0
+
+    # Resume training from a checkpoint
+    if args.load:
+        num_iters = int(args.reload_iters)
+        args.iterations += num_iters
+
+        train_loader = prepare_dataset(
+            args.data_dir, args.dataset, tokenizer,
+            args.train_batch_size, curr_seq_len,
+            args.val_batch_size, curr_seq_len,
+            args.test_batch_size, curr_seq_len,
+            make_train=True,
+            make_val=False,
+            make_test=False,
+            load=True,
+            reload_iters=args.reload_iters,
+            num_workers=args.workers, data_type=args.data_type
+        )
+        logger.info("Resume training from iteration %d" % num_iters)
+    else:
+        num_iters = 0
+
     optimizer.zero_grad()
     beta = args.beta_0
 
@@ -281,7 +308,7 @@ def main():
 
         return loss, ce_loss, kl_loss
 
-    eval_step()
+    # eval_step()
     torch.save(VAE.state_dict(), os.path.join(save_folder,
         'model_' + '{:07d}'.format(num_iters) +
         f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt')
@@ -296,7 +323,13 @@ def main():
         logger.info('\n----------------------------------------------------------------------')
         logger.info("Training loop.       Batches: %d" % len(train_loader))
 
+    
+        first_iter_after_reload = True
         with tqdm(total=len(train_loader)) as pbar:
+            if args.load and first_iter_after_reload:
+                pbar.update(num_iters)
+                first_iter_after_reload = False
+            print("NEXT", len(next(iter(train_loader))))
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
@@ -357,7 +390,7 @@ def main():
                 if num_iters % 10000 == 0:
                     eval_step()
 
-                if num_iters % 25000 == 0:
+                if num_iters % 5000 == 0:
                     logger.info('Saving model...')
                     logger.info("Iteration completed: %d, remained %d" % (num_iters, args.iterations - num_iters))
                     logger.info("Saving model...")

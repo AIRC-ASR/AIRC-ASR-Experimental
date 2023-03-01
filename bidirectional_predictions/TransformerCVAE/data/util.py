@@ -446,7 +446,8 @@ def collate_fn(samples):
 
 
 def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len, val_bsz, val_seq_len, test_bsz=1,
-                    test_seq_len=1024, data_type='t0', num_workers=1, make_train=True, make_val=True, make_test=False):
+                    test_seq_len=1024, data_type='t0', num_workers=1, make_train=True, make_val=True, make_test=False,
+                    load=False, reload_iters=0):
 
     loaders = []
     if dataset_name == 'wp':
@@ -530,11 +531,15 @@ def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len,
 
         print('Done.')
 
-        train_text = texts[:int(len(texts) * 0.9)]
+        if load:
+            train_text = texts[reload_iters:int(len(texts) * 0.9)]
+        else:
+            train_text = texts[:int(len(texts) * 0.9)]
         val_text = texts[int(len(texts) * 0.9):int(len(texts) * 0.95)]
         test_text = texts[int(len(texts) * 0.95):]
 
         if make_train:
+
             train_preproc = Preprocessor(tokenizer, train_seq_len, data_type)
             d_train = PlotDataset(train_text, train_preproc)
             if data_type == 't7' or data_type == 't8':

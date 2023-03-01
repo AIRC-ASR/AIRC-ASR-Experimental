@@ -148,6 +148,9 @@ def bidirectional_two_sentences(VAE, optimizer, y_sentence_encodings, y_sentence
 
     def compute_loss(pair_idx):
         # Get sentence pair encodings and masks
+        if len(y_sentence_encodings[pair_idx]) < 2:
+            return 0, 0, 0, 0, 0, 0
+ 
         encoding_a = y_sentence_encodings[pair_idx][0][:min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
         mask_a = y_sentence_masks[pair_idx][0][:min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
         encoding_b = y_sentence_encodings[pair_idx][1][:min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
