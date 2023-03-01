@@ -531,15 +531,14 @@ def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len,
 
         print('Done.')
 
+        train_text = texts[:int(len(texts) * 0.9)]
         if load:
             train_text = texts[reload_iters:int(len(texts) * 0.9)]
-        else:
-            train_text = texts[:int(len(texts) * 0.9)]
+            
         val_text = texts[int(len(texts) * 0.9):int(len(texts) * 0.95)]
         test_text = texts[int(len(texts) * 0.95):]
 
         if make_train:
-
             train_preproc = Preprocessor(tokenizer, train_seq_len, data_type)
             d_train = PlotDataset(train_text, train_preproc)
             if data_type == 't7' or data_type == 't8':

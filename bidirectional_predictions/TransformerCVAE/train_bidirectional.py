@@ -220,12 +220,13 @@ def main():
     logger.info("Total iteration: %d" % args.iterations)
     e = 0  # number of epoch
 
+    num_iters = 0
     # Resume training from a checkpoint
     if args.load:
         num_iters = int(args.reload_iters)
         args.iterations += num_iters
 
-        train_loader = prepare_dataset(
+        train_loader, = prepare_dataset(
             args.data_dir, args.dataset, tokenizer,
             args.train_batch_size, curr_seq_len,
             args.val_batch_size, curr_seq_len,
@@ -238,8 +239,6 @@ def main():
             num_workers=args.workers, data_type=args.data_type
         )
         logger.info("Resume training from iteration %d" % num_iters)
-    else:
-        num_iters = 0
 
     optimizer.zero_grad()
     beta = args.beta_0
@@ -308,7 +307,7 @@ def main():
 
         return loss, ce_loss, kl_loss
 
-    # eval_step()
+    eval_step()
     torch.save(VAE.state_dict(), os.path.join(save_folder,
         'model_' + '{:07d}'.format(num_iters) +
         f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt')
@@ -326,10 +325,10 @@ def main():
     
         first_iter_after_reload = True
         with tqdm(total=len(train_loader)) as pbar:
+            # Advance the progress bar to the end of the previous run
             if args.load and first_iter_after_reload:
                 pbar.update(num_iters)
                 first_iter_after_reload = False
-            print("NEXT", len(next(iter(train_loader))))
             for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
                 # NOTE: Swaps all the variables for the bidirectional running of the program
                 # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
