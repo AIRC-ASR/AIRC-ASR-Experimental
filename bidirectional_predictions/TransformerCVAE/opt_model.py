@@ -798,9 +798,10 @@ class VAEModel(OPTLMHeadModel):
         self.attn_proj_vary = attn_proj_vary
         self.learn_prior = learn_prior
 
-        self.transformer = Decoder(config, add_input, add_attn, attn_proj_vary)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+        self.decoder = Decoder(config, add_input, add_attn, attn_proj_vary)
+        
         self.encoder = Encoder(config)
         if self.learn_prior:
             self.encoder_prior = Encoder(config)
@@ -858,7 +859,7 @@ class VAEModel(OPTLMHeadModel):
             z = self.reparameterize(latent_mean, latent_logvar)
         assert not torch.isnan(z).any(), 'training get nan z'
 
-        transformer_outputs = self.transformer(input_ids,
+        transformer_outputs = self.decoder(input_ids,
                                                past=past,
                                                attention_mask=attention_mask,
                                                token_type_ids=token_type_ids,

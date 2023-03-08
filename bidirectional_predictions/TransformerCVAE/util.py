@@ -13,20 +13,20 @@ def num_params(model):
     return sum([np.prod(p.size()) for p in model.parameters() if p.requires_grad])
 
 
-def init_para_frompretrained(m, pm, share_para=False):
-    m.wte.weight = pm.embed_tokens.weight
-    m.wpe.weight = pm.embed_positions.weight
+def init_para_frompretrained(model, pretrained_model, share_para=False):
+    model.wte.weight = pretrained_model.embed_tokens.weight
+    model.wpe.weight = pretrained_model.embed_positions.weight
 
-    for i in range(min(len(m.h), len(pm.layers))):
-        m.h[i].ln_1.weight = pm.layers[i].fc1.weight if share_para else copy.copy(pm.layers[i].fc1.weight)
-        m.h[i].ln_1.bias = pm.layers[i].fc1.bias if share_para else copy.copy(pm.layers[i].fc1.bias)
+    for i in range(min(len(model.h), len(pretrained_model.layers))):
+        model.h[i].ln_1.weight = pretrained_model.layers[i].fc1.weight if share_para else copy.copy(pretrained_model.layers[i].fc1.weight)
+        model.h[i].ln_1.bias = pretrained_model.layers[i].fc1.bias if share_para else copy.copy(pretrained_model.layers[i].fc1.bias)
         # m.h[i].attn.c_attn.weight = pm.layers[i].attn.c_attn.weight if share_para else copy.copy(pm.layers[i].attn.c_attn.weight)
         # m.h[i].attn.c_attn.bias = pm.layers[i].attn.c_attn.bias if share_para else copy.copy(pm.layers[i].attn.c_attn.bias)
         # m.h[i].attn.c_proj.weight = pm.layers[i].attn.c_proj.weight if share_para else copy.copy(pm.layers[i].attn.c_proj.weight)
         # m.h[i].attn.c_proj.bias = pm.layers[i].attn.c_proj.bias if share_para else copy.copy(pm.layers[i].attn.c_proj.bias)
-        m.h[i].attn = pm.layers[i].self_attn
-        m.h[i].ln_2.weight = pm.layers[i].fc2.weight if share_para else copy.copy(pm.layers[i].fc2.weight)
-        m.h[i].ln_2.bias = pm.layers[i].fc2.bias if share_para else copy.copy(pm.layers[i].fc2.bias)
+        model.h[i].attn = pretrained_model.layers[i].self_attn
+        model.h[i].ln_2.weight = pretrained_model.layers[i].fc2.weight if share_para else copy.copy(pretrained_model.layers[i].fc2.weight)
+        model.h[i].ln_2.bias = pretrained_model.layers[i].fc2.bias if share_para else copy.copy(pretrained_model.layers[i].fc2.bias)
         # m.h[i].mlp.c_fc.weight = pm.layers[i].mlp.c_fc.weight if share_para else copy.copy(pm.layers[i].mlp.c_fc.weight)
         # m.h[i].mlp.c_fc.bias = pm.layers[i].mlp.c_fc.bias if share_para else copy.copy(pm.layers[i].mlp.c_fc.bias)
         # m.h[i].mlp.c_proj.weight = pm.layers[i].mlp.c_proj.weight if share_para else copy.copy(pm.layers[i].mlp.c_proj.weight)

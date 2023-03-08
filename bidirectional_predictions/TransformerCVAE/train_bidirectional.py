@@ -150,7 +150,7 @@ def main():
 
     VAE = VAEModel(config, add_input=args.add_input, add_attn=args.add_attn, add_softmax=args.add_softmax,
                    attn_proj_vary=args.attn_proj_vary, learn_prior=args.learn_prior)
-    init_para_frompretrained(VAE.transformer, tf_model.decoder, share_para=True)
+    init_para_frompretrained(VAE.decoder, tf_model.decoder, share_para=True)
     init_para_frompretrained(VAE.encoder, tf_model.decoder, share_para=False)
     if args.learn_prior:
         init_para_frompretrained(VAE.encoder_prior, VAE.encoder, share_para=True)
