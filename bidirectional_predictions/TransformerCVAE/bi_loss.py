@@ -162,6 +162,9 @@ def bidirectional_two_sentences(VAE, optimizer, sentence_encodings, sentence_mas
         total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a, \
             total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b = 0, 0, 0, 0, 0, 0
         
+        if len(sentence_encodings[pair_idx]) < 2:
+            return 0, 0, 0, 0, 0, 0
+        
         # Get sentence pair encodings and masks
         encoding_a = sentence_encodings[pair_idx][0][:min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
         mask_a = sentence_masks[pair_idx][0][:min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
