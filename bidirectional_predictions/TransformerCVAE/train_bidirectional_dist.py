@@ -180,27 +180,12 @@ def main_worker(gpu, ngpus_per_node, args):
     max_val_batches = 20000  # max num. of val batches
     logger.info("Total iteration: %d" % args.iterations)
     e = 0  # number of epoch
-
     num_iters = 0
     # Resume training from a checkpoint
     if args.load:
-        num_iters = int(args.reload_iters)
-        args.iterations += num_iters
-
-        train_loader, = prepare_dataset(
-            args.data_dir, args.dataset, tokenizer,
-            args.train_batch_size, curr_seq_len,
-            args.val_batch_size, curr_seq_len,
-            args.test_batch_size, curr_seq_len,
-            make_train=True,
-            make_val=False,
-            make_test=False,
-            load=True,
-            reload_iters=args.reload_iters,
-            num_workers=args.workers, data_type=args.data_type,
-            distributed=True
-        )
-        logger.info("Resume training from iteration %d" % num_iters)
+        e = args.reload_epoch
+        num_iters = args.reload_iters
+        logger.info(f"Resume training from epoch {args.reload_epoch}, iteration {args.reload_iters}")
 
     optimizer.zero_grad()
     beta = args.beta_0
@@ -276,104 +261,101 @@ def main_worker(gpu, ngpus_per_node, args):
             f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt')
         )
 
-    e = 0
-    while num_iters < args.iterations:
-        # Run epoch
-        st = time.time()
+    while e < args.num_epochs:
+        while num_iters < args.iterations:
+            # Run epoch
+            st = time.time()
 
-        # Training
-        logger.info('\n----------------------------------------------------------------------')
-        logger.info("Training loop.       Batches: %d" % len(train_loader))
+            # Training
+            logger.info('\n----------------------------------------------------------------------')
+            logger.info("Training loop.       Batches: %d" % len(train_loader))
 
-        with tqdm(total=len(train_loader)) as pbar:
-            for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
-                # NOTE: Swaps all the variables for the bidirectional running of the program
-                # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
-                #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
+            with tqdm(total=len(train_loader)) as pbar:
+                for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
+                    # NOTE: Swaps all the variables for the bidirectional running of the program
+                    # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
+                    #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
 
-                if not tuning_all and num_iters >= tuning_all_after_iters:
-                    for name, parameter in VAE.named_parameters():
-                        # logger.info((name, parameter.requires_grad))
-                        parameter.requires_grad = True
-                    tuning_all = True
+                    if not tuning_all and num_iters >= tuning_all_after_iters:
+                        for name, parameter in VAE.named_parameters():
+                            # logger.info((name, parameter.requires_grad))
+                            parameter.requires_grad = True
+                        tuning_all = True
 
-                try:
-                    loss, ce_loss, kl_loss = calculate_loss(loss_model, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask)
-                except RuntimeError as e:
-                    if 'out of memory' in str(e):
-                        logger.info('| WARNING: ran out of memory, skipping batch')
-                        torch.cuda.empty_cache()
-                        gc.collect()
-                        continue
-                    else:
-                        raise e
+                    try:
+                        loss, ce_loss, kl_loss = calculate_loss(loss_model, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask)
+                    except RuntimeError as e:
+                        if 'out of memory' in str(e):
+                            logger.info('| WARNING: ran out of memory, skipping batch')
+                            torch.cuda.empty_cache()
+                            gc.collect()
+                            continue
+                        else:
+                            raise e
 
-                if args.rank == 0 and num_iters % 100 == 0:
-                    logger.info(f"CURRENT ITERATION: {num_iters}")
-                    logger.info(f"CURRENT LOSS: Loss: {loss}, CE: {ce_loss}, KL: {kl_loss}")
+                    if args.rank == 0 and num_iters % 100 == 0:
+                        logger.info(f"CURRENT ITERATION: {num_iters}")
+                        logger.info(f"CURRENT LOSS: Loss: {loss}, CE: {ce_loss}, KL: {kl_loss}")
 
-                if args.rank == 0:
-                    lr = scheduler.get_last_lr()[0]
-                    # Log to Tensorboard
-                    t_writer.add_scalar('loss', loss, num_iters)
-                    t_writer.add_scalar('ppl', math.exp(min(ce_loss, 10)), num_iters)
-                    t_writer.add_scalar('lr', lr, num_iters)
-                    t_writer.add_scalar('iter_time', time.time() - st, num_iters)
-                    t_writer.add_scalar('kl', kl_loss, num_iters)
-                    t_writer.add_scalar('beta', beta, num_iters)
-
-                    if args.model_type == 'ae_vae_fusion':
-                        # Output is never defined.  Raise error
-                        raise NotImplementedError()
-                        loss, ce_loss, kl_loss = output[0]
+                    if args.rank == 0:
+                        lr = scheduler.get_last_lr()[0]
                         # Log to Tensorboard
-                        t_writer.add_scalar('ae_loss', loss, num_iters)
-                        t_writer.add_scalar('ae_kl', kl_loss, num_iters)
+                        t_writer.add_scalar('loss', loss, num_iters)
+                        t_writer.add_scalar('ppl', math.exp(min(ce_loss, 10)), num_iters)
+                        t_writer.add_scalar('lr', lr, num_iters)
+                        t_writer.add_scalar('iter_time', time.time() - st, num_iters)
+                        t_writer.add_scalar('kl', kl_loss, num_iters)
+                        t_writer.add_scalar('beta', beta, num_iters)
 
-                st = time.time()
+                        if args.model_type == 'ae_vae_fusion':
+                            # Output is never defined.  Raise error
+                            raise NotImplementedError()
+                            loss, ce_loss, kl_loss = output[0]
+                            # Log to Tensorboard
+                            t_writer.add_scalar('ae_loss', loss, num_iters)
+                            t_writer.add_scalar('ae_kl', kl_loss, num_iters)
 
-                if args.warmup != -1:
-                    scheduler.step()
-                
-                end = num_iters >= args.iterations
-                if end: break
-                num_iters += 1
-                pbar.update(1)
+                    st = time.time()
 
-                if num_iters % args.cycle == 0:
-                    beta = args.beta_0
-                    logger.info('KL annealing restart')
+                    if args.warmup != -1:
+                        scheduler.step()
+                    
+                    num_iters += 1
+                    pbar.update(1)
 
-                if args.rank == 0 and num_iters % 10000 == 0:
-                    eval_step()
+                    if num_iters % args.cycle == 0:
+                        beta = args.beta_0
+                        logger.info('KL annealing restart')
 
-                if args.rank == 0 and num_iters % 10000 == 0:
-                    logger.info('Saving model...')
-                    logger.info("Iteration completed: %d, remained %d" % (num_iters, args.iterations - num_iters))
-                    logger.info("Saving model...")
-                    logger.info('\n------------------------------------------------------')
-                    torch.save(VAE.state_dict(), os.path.join(save_folder,
-                        'model_' + '{:07d}'.format(num_iters) +
-                        f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt')
-                    )
+                    if args.rank == 0 and num_iters % 10000 == 0:
+                        eval_step()
 
-                if args.switch_time > 0 and num_iters == int(args.iterations * args.switch_time):
-                    logger.info("Switch to long sequence training")
-                    curr_seq_len = args.long_seq_len
-                    curr_batch_size = args.train_batch_size
-                    train_loader, val_loader, test_loader = prepare_dataset(
-                        args.data_dir, args.dataset, tokenizer,
-                        args.train_batch_size, curr_seq_len,
-                        args.val_batch_size, curr_seq_len,
-                        args.test_batch_size, curr_seq_len,
-                        make_test=True,
-                        num_workers=args.workers, data_type=args.data_type,
-                        distributed=True
-                    )
+                    if args.rank == 0 and num_iters % 10000 == 0:
+                        logger.info('Saving model...')
+                        logger.info("Iteration completed: %d, remained %d" % (num_iters, args.iterations - num_iters))
+                        logger.info("Saving model...")
+                        logger.info('\n------------------------------------------------------')
+                        torch.save(VAE.state_dict(), os.path.join(save_folder,
+                            'model_' + '{:07d}'.format(num_iters) +
+                            f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt')
+                        )
 
-        if not end:
-            e += 1
-            logger.info("Training loop. The ith epoch completed: %d" % e)
+                    if args.switch_time > 0 and num_iters == int(args.iterations * args.switch_time):
+                        logger.info("Switch to long sequence training")
+                        curr_seq_len = args.long_seq_len
+                        curr_batch_size = args.train_batch_size
+                        train_loader, val_loader, test_loader = prepare_dataset(
+                            args.data_dir, args.dataset, tokenizer,
+                            args.train_batch_size, curr_seq_len,
+                            args.val_batch_size, curr_seq_len,
+                            args.test_batch_size, curr_seq_len,
+                            make_test=True,
+                            num_workers=args.workers, data_type=args.data_type,
+                            distributed=True
+                        )
+
+        e += 1
+        logger.info("Training loop. The ith epoch completed: %d" % e)
 
     if args.rank == 0:
         torch.save(VAE.state_dict(), os.path.join(save_folder,
@@ -440,7 +422,10 @@ def main():
     
     # Reload args
     parser.add_argument('--reload_path', type=str, default='')
+    parser.add_argument('--reload_epoch', type=int, default=0)
     parser.add_argument('--reload_iters', type=int, default=0)
+
+    parser.add_argument('--num_epochs', type=int, default=4)
 
     parser.add_argument('--world-size', default=1, type=int,
                         help='number of nodes for distributed training')
