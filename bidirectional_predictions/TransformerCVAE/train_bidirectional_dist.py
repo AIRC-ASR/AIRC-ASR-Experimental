@@ -459,11 +459,12 @@ def main():
     1 0 2 0
     1 0 0 2
     '''
-    args = parser.parse_args('test --add_input --learn_prior --fp16 --switch-time 0.5 '
-                             '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
-                             '--short_seq_len 1024 --long_seq_len 1024 '
-                             '--fwd_loss_weight 1 --bkwd_loss_weight 0 --all_sentence_loss_weight 2 '
-                             '--prompt_loss_weight 0 '.split())
+    # args = parser.parse_args('test --add_input --learn_prior --fp16 --switch-time 0.5 '
+    #                          '--val_batch_size 1 --test_batch_size 1 '
+    #                          '--short_seq_len 1024 --long_seq_len 1024 '
+    #                          '--fwd_loss_weight 1 --bkwd_loss_weight 0 --all_sentence_loss_weight 2 '
+    #                          '--prompt_loss_weight 0 '.split())
+    args = parser.parse_args()
 
 
 
