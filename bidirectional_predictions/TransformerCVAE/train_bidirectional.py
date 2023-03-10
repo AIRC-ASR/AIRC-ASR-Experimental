@@ -137,6 +137,10 @@ def main():
     config.n_ctx = 1024
 
     # add special tokens
+    special_tokens = {
+        'sentence_fwd': '</SFWD/>',
+        'sentence_bkwd': '</SBKWD/>'
+    }
     # special_tokens_dict = {
     #     'pad_token': '<|startoftext|>',
     #     'cls_token': '<|startofcond|>',
@@ -144,7 +148,7 @@ def main():
     #     'mask_token': '<|endofcond|>'
     # }
     # num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
-    # logger.info('We have added', num_added_toks, 'special tokens')
+    logger.info('We have added', len(special_tokens), 'special tokens')
     # # Notice: resize_token_embeddings expect to receive the full size of the new vocab
     # gpt2_model.resize_token_embeddings(len(tokenizer))
     # assert tokenizer.pad_token == '<|startoftext|>'
@@ -247,13 +251,27 @@ def main():
 
         logger.info("Measuring Input distribution...")
         plot_input_distribution(VAE, tokenizer, args.model_type, test_loader, args.dataset, num_iters, save_folder)
-        logger.info("Val Setup...")
+        logger.info("Validation Step...")
         validate_step(VAE, tokenizer, args.model_type, val_loader, num_iters, max_val_batches, loss_fn, save_folder)
-        logger.info("Generate...")
+        logger.info("Generate output samples...")
         generate_samples(VAE, tokenizer, args, test_loader, num_iters, save_folder)
 
     def calculate_loss(x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask):
         '''Calculates the loss of the model forward, backward, and for the sentence combinations'''
+        
+        # BIDIRECTIONAL LOSSES
+
+        # This finds the total loss for the previous sentence, Sentence B -> Sentence A and Sentence A -> Sentence B
+        previous_sentence_loss_output = bidirectional_loss("previous_sentence", VAE, optimizer, y_mask,
+            y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+        (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
+        total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
+
+        # This finds the total loss for all previous sentences, Sentence B -> All Previous Sentences
+        all_previous_sentences_loss_output = bidirectional_loss("all_previous_sentences", VAE, optimizer, y_mask,
+            y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
+        (total_loss_all_previous_sentences, total_ce_loss_all_previous_sentences, 
+        total_kl_loss_all_previous_sentences) = all_previous_sentences_loss_output
 
         # This computes a training step going from input to output and computes the losses
         # NORMAL LOSS, Prompt -> Story

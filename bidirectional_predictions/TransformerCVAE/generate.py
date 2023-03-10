@@ -156,7 +156,7 @@ def run_model():
 
     parser.add_argument('--learn_prior', action="store_true")
 
-    args = parser.parse_args('--model-path out/wi.1.proj_vary_cyc_cvae/model_0030000.pt '
+    args = parser.parse_args('--model-path out/test/model_latest.pt '
                              '--add_input --learn_prior '.split())
     print(args)
 
@@ -185,9 +185,9 @@ def run_model():
     save_folder = args.model_path + '.eval/'
     os.makedirs(save_folder, exist_ok=True)
     importlib.reload(logging)
-    logging.basicConfig(filename=os.path.join(save_folder, 'eval.log'),
-                        level=logging.INFO, format='%(asctime)s--- %(message)s')
-    logging.info('\n----------------------------------------------------------------------')
+    """logging.basicConfig(filename=os.path.join(save_folder, 'eval.log'),
+                        level=logging.INFO, format='%(asctime)s--- %(message)s')"""
+    # logging.info('\n----------------------------------------------------------------------')
 
     print('Loading models...')
     cache_dir = os.path.join(args.out_dir, 'model_cache')
@@ -198,6 +198,7 @@ def run_model():
     gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir=cache_dir)
     print('gpt2_params:', num_params(gpt2_model))  # gpt2: 124439808
     config = GPT2Config()
+    config.n_ctx = 1024
 
     # # add special tokens
     # special_tokens_dict = {
@@ -250,8 +251,8 @@ def run_model():
     VAE.to(device)
     loss_fn = nn.CrossEntropyLoss(reduction='none')
 
-    logging.info('\n----------------------------------------------------------------------')
-    logging.info("Testing loop. batches: %d" % len(test_loader))
+    # logging.info('\n----------------------------------------------------------------------')
+    # logging.info("Testing loop. batches: %d" % len(test_loader))
 
     endoftext = tokenizer.convert_tokens_to_ids("<|endoftext|>")
     startofcond = tokenizer.convert_tokens_to_ids("<|startofcond|>")
@@ -356,18 +357,18 @@ def run_model():
                     samples_file.write('\n' * 4)
                     samples_file.flush()
 
-                logging.info('batch %04d finished.', i_test)
+                # logging.info('batch %04d finished.', i_test)
                 pbar.update(1)
 
     print('Test complete with %05d samples.' % n_samples)
-    logging.info("Test complete with %05d samples.", n_samples)
+    # logging.info("Test complete with %05d samples.", n_samples)
 
     bleu4 = round(bleu4_sum / n_samples, 3)
     rouge_scores_values = [round(r / n_samples, 3) for r in rouge_scores_values_sum]
     print(' bleu-4:', bleu4)
     print(' rouge :', rouge_scores_values)
-    logging.info(' bleu-4: %f', bleu4)
-    logging.info(' rouge : %s', str(rouge_scores_values))
+    # logging.info(' bleu-4: %f', bleu4)
+    # logging.info(' rouge : %s', str(rouge_scores_values))
 
 
 if __name__ == '__main__':

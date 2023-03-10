@@ -3,7 +3,6 @@ import os
 import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import argparse
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config
