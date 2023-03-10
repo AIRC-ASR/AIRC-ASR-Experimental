@@ -1,13 +1,13 @@
-import os, time, gc, json, pickle, argparse, math
+import os, time, gc, argparse, math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.data as data
-from torch.nn import DataParallel
+# import torch.utils.data as data
+# from torch.nn import DataParallel
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import numpy as np
-import transformers
+# import transformers
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config, get_linear_schedule_with_warmup, Conv1D
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -15,10 +15,10 @@ import importlib
 import logging
 import copy
 
-from apex.optimizers import FusedAdam
+# from apex.optimizers import FusedAdam
 # from apex import amp
-from torch import amp
-from apex.fp16_utils import FP16_Optimizer
+# from torch import amp
+# from apex.fp16_utils import FP16_Optimizer
 
 # from apex.parallel import DistributedDataParallel as DDP
 from torch.nn.parallel import DistributedDataParallel as DDP

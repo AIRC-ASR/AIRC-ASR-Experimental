@@ -18,7 +18,7 @@ class Device:
     def set_device(self, ident, type):
         self.device_id = ident
         self.type = type
-        os.environ["CUDA_VISIBLE_DEVICES"] = ident
+        # os.environ["CUDA_VISIBLE_DEVICES"] = ident
         self.device = torch.device(type)
 
 

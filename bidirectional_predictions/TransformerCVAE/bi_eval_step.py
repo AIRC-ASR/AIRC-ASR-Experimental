@@ -51,6 +51,7 @@ def validate_step(model, tokenizer, model_type, val_loader, num_iters, max_val_b
 
             text = target_tokens[0, :].tolist()
             logprob = ce_loss.tolist()
+            logprob = logprob[:len(text)]
             assert len(text) == len(logprob)
 
             # only for story

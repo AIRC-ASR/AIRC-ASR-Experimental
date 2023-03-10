@@ -14,7 +14,6 @@ import urllib.request
 import json, re
 import numpy as np
 from scipy.spatial.distance import cdist
-from bert_serving.client import BertClient
 from tqdm import trange
 from random import shuffle
 
@@ -447,7 +446,7 @@ def collate_fn(samples):
 
 def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len, val_bsz, val_seq_len, test_bsz=1,
                     test_seq_len=1024, data_type='t0', num_workers=1, make_train=True, make_val=True, make_test=False,
-                    load=False, reload_iters=0):
+                    load=False, reload_iters=0, distributed=False):
 
     loaders = []
     if dataset_name == 'wp':
@@ -545,7 +544,7 @@ def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len,
                 d_train = [t for lt in d_train for t in lt]
             print('Train dataset size', len(d_train))
             loaders.append(data.DataLoader(d_train,
-                                           # sampler=DistributedSampler(d_train) if distributed else None,
+                                           sampler=DistributedSampler(d_train) if distributed else None,
                                            batch_size=train_bsz,
                                            pin_memory=True,
                                            drop_last=True,
@@ -558,7 +557,7 @@ def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len,
                 d_val = [t for lt in d_val for t in lt]
             print('Val dataset size', len(d_val), val_bsz)
             loaders.append(data.DataLoader(d_val,
-                                           # sampler=DistributedSampler(d_val),
+                                           sampler=DistributedSampler(d_val) if distributed else None,
                                            batch_size=val_bsz,
                                            pin_memory=True,
                                            drop_last=True,
@@ -571,7 +570,7 @@ def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len,
                 d_test = [t for lt in d_test for t in lt]
             print('Test dataset size', len(d_test))
             loaders.append(data.DataLoader(d_test,
-                                           # sampler=DistributedSampler(d_val),
+                                           sampler=DistributedSampler(d_val) if distributed else None,
                                            batch_size=test_bsz,
                                            pin_memory=True,
                                            drop_last=True,

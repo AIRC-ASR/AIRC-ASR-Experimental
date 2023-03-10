@@ -101,14 +101,6 @@ def bidirectional_all_previous_sentences(VAE, optimizer, y_sentence_encodings, y
     total_ce_loss_all_previous_sentences = 0
     total_kl_loss_sentence_all_previous_sentences = 0
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    VAE.to(device)
-    loss_fn.to(device)
-
-    if torch.cuda.device_count() > 1:
-        print("Using", torch.cuda.device_count(), "GPUs.")
-        VAE = nn.DataParallel(VAE)
-
     for batch_idx in range(curr_batch_size):
         prev_encodings = None
         prev_masks = None
@@ -123,8 +115,8 @@ def bidirectional_all_previous_sentences(VAE, optimizer, y_sentence_encodings, y
             batch_losses.append((loss, ce_loss, kl_loss))
 
             if idx == 0:
-                prev_encodings = torch.zeros((1, input_tokens.shape[1]), dtype=torch.long).to(device)
-                prev_masks = torch.zeros((1, input_tokens.shape[1]), dtype=torch.long).to(device)
+                prev_encodings = torch.zeros((1, input_tokens.shape[1]), dtype=torch.long)
+                prev_masks = torch.zeros((1, input_tokens.shape[1]), dtype=torch.long)
             else:
                 prev_encodings[:, 0: input_tokens.shape[1] - y_sentence_encoding.shape[1]] = prev_encodings[:, y_sentence_encoding.shape[1]:]
                 prev_masks[:, 0: input_tokens.shape[1] - y_sentence_mask.shape[1]] = prev_masks[:, y_sentence_mask.shape[1]:]
