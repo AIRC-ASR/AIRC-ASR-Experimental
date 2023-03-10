@@ -445,7 +445,8 @@ def collate_fn(samples):
 
 
 def prepare_dataset(data_dir, dataset_name, tokenizer, train_bsz, train_seq_len, val_bsz, val_seq_len, test_bsz=1,
-                    test_seq_len=1024, data_type='t0', num_workers=1, make_train=True, make_val=True, make_test=False):
+                    test_seq_len=1024, data_type='t0', num_workers=1, make_train=True, make_val=True, make_test=False,
+                    distributed=False):
 
     loaders = []
     if dataset_name == 'wp':

@@ -181,11 +181,21 @@ def main_worker(gpu, ngpus_per_node, args):
     logger.info("Total iteration: %d" % args.iterations)
     e = 0  # number of epoch
     num_iters = 0
-    # Resume training from a checkpoint
+    i = 0
+
     if args.load:
+        # Resume training from a checkpoint
+        train_iter = iter(train_loader)
+
         e = args.reload_epoch
         num_iters = args.reload_iters
-        logger.info(f"Resume training from epoch {args.reload_epoch}, iteration {args.reload_iters}")
+        i = args.reload_batches
+
+        # Fast forward to where we left off in the dataloader
+        for _ in range(args.reload_batches):
+            next(train_iter)
+
+    logger.info(f"Resume training from epoch {args.reload_epoch}, batch {args.reload_batches}")
 
     optimizer.zero_grad()
     beta = args.beta_0
@@ -257,8 +267,7 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.rank == 0:
         # eval_step()
         torch.save(VAE.state_dict(), os.path.join(save_folder,
-            'model_' + '{:07d}'.format(num_iters) +
-            f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt')
+            f'model_{e}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
         )
 
     while e < args.num_epochs:
@@ -271,7 +280,8 @@ def main_worker(gpu, ngpus_per_node, args):
             logger.info("Training loop.       Batches: %d" % len(train_loader))
 
             with tqdm(total=len(train_loader)) as pbar:
-                for i, (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) in enumerate(train_loader):
+                while i < len(train_loader):
+                    (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) = next(train_iter)
                     # NOTE: Swaps all the variables for the bidirectional running of the program
                     # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                     #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
@@ -336,8 +346,7 @@ def main_worker(gpu, ngpus_per_node, args):
                         logger.info("Saving model...")
                         logger.info('\n------------------------------------------------------')
                         torch.save(VAE.state_dict(), os.path.join(save_folder,
-                            'model_' + '{:07d}'.format(num_iters) +
-                            f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt')
+                            f'model_{e}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
                         )
 
                     if args.switch_time > 0 and num_iters == int(args.iterations * args.switch_time):
@@ -354,13 +363,15 @@ def main_worker(gpu, ngpus_per_node, args):
                             distributed=True
                         )
 
+                    i += 1
+
         e += 1
         logger.info("Training loop. The ith epoch completed: %d" % e)
 
     if args.rank == 0:
         torch.save(VAE.state_dict(), os.path.join(save_folder,
-                'model_' + '{:07d}'.format(num_iters) +
-                f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt'))
+            f'model_{e}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
+        )
     logger.info("Training complete.")
     dist.destroy_process_group()
 
@@ -424,6 +435,7 @@ def main():
     parser.add_argument('--reload_path', type=str, default='')
     parser.add_argument('--reload_epoch', type=int, default=0)
     parser.add_argument('--reload_iters', type=int, default=0)
+    parser.add_argument('--reload_batches', type=int, default=0)
 
     parser.add_argument('--num_epochs', type=int, default=4)
 
