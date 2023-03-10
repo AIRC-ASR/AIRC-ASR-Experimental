@@ -54,6 +54,7 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.rank != 0:
         # Stall to have rank 0 node go first
         time.sleep(3)
+    
     while not connected:
         try:
             dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
@@ -92,6 +93,10 @@ def main_worker(gpu, ngpus_per_node, args):
     config.n_ctx = 1024
 
     # add special tokens
+    special_tokens = {
+        'sentence_fwd': '</SFWD/>',
+        'sentence_bkwd': '</SBKWD/>'
+    }
     # special_tokens_dict = {
     #     'pad_token': '<|startoftext|>',
     #     'cls_token': '<|startofcond|>',
@@ -99,7 +104,7 @@ def main_worker(gpu, ngpus_per_node, args):
     #     'mask_token': '<|endofcond|>'
     # }
     # num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
-    # logger.info('We have added', num_added_toks, 'special tokens')
+    logger.info(f'We have added {len(special_tokens.keys())} special tokens')
     # # Notice: resize_token_embeddings expect to receive the full size of the new vocab
     # gpt2_model.resize_token_embeddings(len(tokenizer))
     # assert tokenizer.pad_token == '<|startoftext|>'
@@ -205,9 +210,9 @@ def main_worker(gpu, ngpus_per_node, args):
 
         logger.info("Measuring Input distribution...")
         plot_input_distribution(VAE, tokenizer, args.model_type, test_loader, args.dataset, num_iters, save_folder)
-        logger.info("Val Setup...")
+        logger.info("Validation Step...")
         validate_step(VAE, tokenizer, args.model_type, val_loader, num_iters, max_val_batches, loss_fn, save_folder)
-        logger.info("Generate...")
+        logger.info("Generate output samples...")
         generate_samples(VAE, tokenizer, args, test_loader, num_iters, save_folder)
 
     def calculate_loss(model, x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask):
@@ -236,7 +241,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
             (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
             total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
-            # print('previous_sentence_loss_output', previous_sentence_loss_output)
+            print('previous_sentence_loss_output', previous_sentence_loss_output)
         else:
             total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a, total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b = 0, 0, 0, 0, 0, 0
         
@@ -265,7 +270,7 @@ def main_worker(gpu, ngpus_per_node, args):
         return loss, ce_loss, kl_loss
 
     if args.rank == 0:
-        eval_step()
+        # eval_step()
         torch.save(VAE.state_dict(), os.path.join(save_folder,
             'model_' + '{:07d}'.format(num_iters) +
             f'_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}' + '.pt')

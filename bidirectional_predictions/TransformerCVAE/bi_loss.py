@@ -180,7 +180,7 @@ def bidirectional_two_sentences(VAE, optimizer, sentence_encodings, sentence_mas
                 total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b)
 
     # Use multithreading to compute losses for all pairwise sentence combinations
-    with ThreadPoolExecutor() as executor:
+    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
         # Start all the threads
         futures = [executor.submit(compute_loss, idx) for idx in range(num_pairs)]
         # Wait for all the threads to finish and get the results

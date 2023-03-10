@@ -296,7 +296,6 @@ def main():
                 y_tokens, mask, loss_fn, beta, args.model_type, tokenizer, curr_batch_size, curr_seq_len, input_tokens)
             (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,
             total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b) = previous_sentence_loss_output
-            print('previous_sentence_loss_output', previous_sentence_loss_output)
         else:
             total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a, total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b = 0, 0, 0, 0, 0, 0
         
