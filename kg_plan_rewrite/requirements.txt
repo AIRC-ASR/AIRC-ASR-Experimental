@@ -1,0 +1,7 @@
+wheel
+transformers
+wikipedia
+newspaper3k
+GoogleNews
+pyvis
+torch
