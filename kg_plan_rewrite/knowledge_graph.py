@@ -1,7 +1,10 @@
+from __future__ import annotations
 # needed to load the REBEL model
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+import pandas as pd
 import math
 import torch
+from torchkge.data_structures import KnowledgeGraph
 
 # wrapper for wikipedia API
 import wikipedia
@@ -27,10 +30,8 @@ class KB():
         return any(self.are_relations_equal(r1, r2) for r2 in self.relations)
 
     def merge_relations(self, r1):
-        r2 = [r for r in self.relations
-              if self.are_relations_equal(r1, r)][0]
-        spans_to_add = [span for span in r1["meta"]["spans"]
-                        if span not in r2["meta"]["spans"]]
+        r2 = [r for r in self.relations if self.are_relations_equal(r1, r)][0]
+        spans_to_add = [span for span in r1["meta"]["spans"] if span not in r2["meta"]["spans"]]
         r2["meta"]["spans"] += spans_to_add
 
     def get_wikipedia_data(self, candidate_entity):
@@ -70,6 +71,20 @@ class KB():
             self.relations.append(r)
         else:
             self.merge_relations(r)
+
+    def combine(self, other: KB):
+        for rel in other.relations:
+            self.add_relation(rel)
+
+    def to_torch_kg(self):
+        kb_dict = {"from": [], "to": [], "rel": []}
+        for rel in self.relations:
+            kb_dict["from"].append(rel["head"])
+            kb_dict["to"].append(rel["tail"])
+            kb_dict["rel"].append(rel["type"])
+
+        kb_frame = pd.DataFrame(kb_dict)
+        return KnowledgeGraph(df=kb_frame)
 
     def print(self):
         print("Entities:")

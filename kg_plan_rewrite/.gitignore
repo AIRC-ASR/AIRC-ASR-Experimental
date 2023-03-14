@@ -1,3 +1,4 @@
 kg_plan_rw/
 resources.txt
 lib/
+redis_creds.json

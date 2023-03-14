@@ -4,5 +4,6 @@ wikipedia
 newspaper3k
 GoogleNews
 pyvis
-pykg2vec
+torchkge
 torch
+redis
