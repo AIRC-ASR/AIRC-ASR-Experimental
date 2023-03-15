@@ -1,4 +1,4 @@
-kg_plan_rw/
+kg_plan_env/
 resources.txt
 lib/
 redis_creds.json
