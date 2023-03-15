@@ -1,29 +1,14 @@
-import redis
-import json
-import pandas as pd
 from torch.optim import Adam
-from knowledge_graph import KB, from_text_to_kb
-from torchkge.evaluation import LinkPredictionEvaluator
+from knowledge_graph import from_text_to_kb
 from torchkge.data_structures import KnowledgeGraph
 from torchkge.models import TransEModel
-from torchkge.utils.datasets import load_fb15k
 from torchkge.utils import MarginLoss, DataLoader
 from tqdm.autonotebook import tqdm
 from torch import cuda
-
 from torchkge.sampling import BernoulliNegativeSampler
 
 
-
-# with open("kg_plan_rewrite/redis_creds.json", "r") as file:
-#     creds = json.loads(file.read())
-# db = redis.Redis(**creds)
-# db.set("foo", "bar")
-# value = db.get('foo')
-# print(value)
-
-
-def trained_embed(kg_train: KnowledgeGraph, kg_test: KnowledgeGraph, kg_val: KnowledgeGraph = None):
+def trained_embed(kg_train: KnowledgeGraph):
     # Define some hyper-parameters for training
     emb_dim = 100
     lr = 0.0004
@@ -31,10 +16,8 @@ def trained_embed(kg_train: KnowledgeGraph, kg_test: KnowledgeGraph, kg_val: Kno
     n_epochs = 1000
     batch_size = 32768
 
-    # Load dataset
-    # kg_train, kg_val, kg_test = load_fb15k()
-
-# Define the model and criterion
+    # Define the model and criterion
+    print('n_ent', kg_train.n_ent, 'n_rel', kg_train.n_rel)
     model = TransEModel(emb_dim, kg_train.n_ent, kg_train.n_rel, dissimilarity_type='L2')
     criterion = MarginLoss(margin)
 
@@ -54,7 +37,7 @@ def trained_embed(kg_train: KnowledgeGraph, kg_test: KnowledgeGraph, kg_val: Kno
     iterator = tqdm(range(n_epochs), unit='epoch')
     for epoch in iterator:
         running_loss = 0.0
-        for i, batch in enumerate(dataloader):
+        for batch in dataloader:
             h, t, r = batch[0], batch[1], batch[2]
             n_h, n_t = sampler.corrupt_batch(h, t, r)
 
@@ -75,32 +58,19 @@ def trained_embed(kg_train: KnowledgeGraph, kg_test: KnowledgeGraph, kg_val: Kno
     return model
 
 
-
-# TODO: Finish this function
-def text_to_kg_embedding(train_texts: list[str], test_texts: list[str]):
+def text_to_kg_embedding(train_text: str):
     '''This function takes a piece of text, creates a knowledge graph
     from it based on the REBEL model and return knowledge graph embeddings.'''
-    # https://pykg2vec.readthedocs.io/en/latest/intro.html
-    # TODO: Check if the text is in a cache, and if so, return the knowledge graph
-    # TODO: embeddings from the cache, otherwise, store it in the cache
-    # TODO: Also store the exact model configurations
-    # TODO: Optionally, add tuning of the model here
-    print("Creating graphs...")
-    dataset = (from_text_to_kb(train_texts[0]), from_text_to_kb(test_texts[0]))
-
-    for i, texts in enumerate([train_texts, test_texts]):
-        for text in texts[1:]:
-            tmp = from_text_to_kb(text)
-            dataset[i].combine(tmp)
-        
-    
-    dataset = [kb.to_torch_kg() for kb in dataset]
-    print('dataset', dataset)
+    print("Creating graph...")
+    kb = from_text_to_kb(train_text)
+    torch_kb = kb.to_torch_kg()
 
     print("Training embeddings...")
-    embed_model = trained_embed(*dataset)
+    embed_model = trained_embed(torch_kb)
     embeddings = embed_model.get_embeddings()
+
     return embeddings
 
+
 if __name__ == "__main__":
-    print(text_to_kg_embedding(["Barack Obama eats pasta with George Clooney"], ["Barack Obama eats pasta with George Clooney"]))
+    print(text_to_kg_embedding("Barack Obama eats pasta with George Clooney"))

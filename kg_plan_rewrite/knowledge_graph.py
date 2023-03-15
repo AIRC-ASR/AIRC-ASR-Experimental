@@ -83,6 +83,8 @@ class KB():
             kb_dict["to"].append(rel["tail"])
             kb_dict["rel"].append(rel["type"])
 
+        print('self.relations', self.relations)
+        print('kb_dict', kb_dict)
         kb_frame = pd.DataFrame(kb_dict)
         return KnowledgeGraph(df=kb_frame)
 
