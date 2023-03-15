@@ -183,9 +183,10 @@ def main_worker(gpu, ngpus_per_node, args):
     num_iters = 0
     i = 0
 
+    # Resume training from a checkpoint
+    train_iter = iter(train_loader)
+
     if args.load:
-        # Resume training from a checkpoint
-        train_iter = iter(train_loader)
 
         e = args.reload_epoch
         num_iters = args.reload_iters
@@ -365,6 +366,9 @@ def main_worker(gpu, ngpus_per_node, args):
 
                     i += 1
 
+                i = 0
+
+            num_iters = 0
         e += 1
         logger.info("Training loop. The ith epoch completed: %d" % e)
 
