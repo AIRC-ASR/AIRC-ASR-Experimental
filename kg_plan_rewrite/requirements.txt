@@ -7,3 +7,4 @@ pyvis
 torchkge
 torch
 redis
+pytorch-ignite
