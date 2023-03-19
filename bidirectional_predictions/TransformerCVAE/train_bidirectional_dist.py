@@ -400,7 +400,7 @@ def main():
 
     parser.add_argument('--data_type', type=str, default='t1', choices=['t' + str(i) for i in range(9)], help="t: type")
     parser.add_argument('--model_type', type=str, default='cvae', choices=['cvae', 'ae_vae_fusion'])
-    parser.add_argument('--iterations', type=int, default=101640 * 4)  # wp 850001  wi 300001 ax 300001 yp 800001
+    parser.add_argument('--iterations', type=int, default=101640)  # wp 850001  wi 300001 ax 300001 yp 800001
     parser.add_argument('--dataset', type=str, default='wi', choices=['ax', 'yp', 'wp', 'wi'], help="Dataset to use for training")
     parser.add_argument('--warmup', type=int, default=10000,
                         help="Amount of iterations to warmup, then decay. (-1 for no warmup and decay)")
