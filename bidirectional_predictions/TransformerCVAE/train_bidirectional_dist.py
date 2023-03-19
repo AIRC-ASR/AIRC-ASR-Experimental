@@ -282,7 +282,12 @@ def main_worker(gpu, ngpus_per_node, args):
 
             with tqdm(total=len(train_loader)) as pbar:
                 while i < len(train_loader):
-                    (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) = next(train_iter)
+                    try:
+                        (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) = next(train_iter)
+                    except StopIteration:
+                        train_iter = iter(train_loader)
+                        (x_mask, x_tokens, y_mask, y_tokens, input_tokens, target_tokens, mask) = next(train_iter)
+
                     # NOTE: Swaps all the variables for the bidirectional running of the program
                     # if num_iters % args.cycle >= args.cycle - args.beta_warmup:
                     #     beta = min(1.0, beta + (1. - args.beta_0) / args.beta_warmup)
@@ -344,7 +349,6 @@ def main_worker(gpu, ngpus_per_node, args):
                     if args.rank == 0 and num_iters % 10000 == 0:
                         logger.info('Saving model...')
                         logger.info("Iteration completed: %d, remained %d" % (num_iters, args.iterations - num_iters))
-                        logger.info("Saving model...")
                         logger.info('\n------------------------------------------------------')
                         torch.save(VAE.state_dict(), os.path.join(save_folder,
                             f'model_{e}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
@@ -367,6 +371,12 @@ def main_worker(gpu, ngpus_per_node, args):
                     i += 1
 
                 i = 0
+
+            logger.info('Saving model...')
+            torch.save(VAE.state_dict(), os.path.join(save_folder,
+                f'model_{e}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
+            )
+            train_iter = iter(train_loader)
 
             num_iters = 0
         e += 1
