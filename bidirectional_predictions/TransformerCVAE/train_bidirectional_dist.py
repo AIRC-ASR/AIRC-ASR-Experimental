@@ -67,10 +67,10 @@ def main_worker(gpu, ngpus_per_node, args):
             recon_attempt += 1
             time.sleep(10)
 
+    save_folder = os.path.join(args.out_dir, args.experiment)
+    os.makedirs(save_folder, exist_ok=True)
     # logging
     if args.rank == 0:
-        save_folder = os.path.join(args.out_dir, args.experiment)
-        os.makedirs(save_folder, exist_ok=True)
         t_writer = SummaryWriter(os.path.join(save_folder, 'train'), flush_secs=5)
         v_writer = SummaryWriter(os.path.join(save_folder, 'val'), flush_secs=5)
         importlib.reload(logging)
