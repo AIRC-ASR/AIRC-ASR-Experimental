@@ -1,6 +1,7 @@
 venv/
 .idea
 .vscode
+creds
 bidirectional_predictions/TransformerCVAE/apex
 bidirectional_predictions/TransformerCVAE/data/__pycache__
 bidirectional_predictions/TransformerCVAE/__pycache__
