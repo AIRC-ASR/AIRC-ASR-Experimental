@@ -1,9 +1,9 @@
 #!/bin/sh
 module load gcc cuda
-# sbatch -vvvv -N 1 --gres=gpu:8 -t 360 -p npl -o ./slurm_outputs/slurmoutput-%J.out ./experiments/experiment2.sh
+# sbatch -vvvv -N 1 --gres=gpu:1 -t 360 -p npl -o ./slurm_outputs/slurmoutput-%J.out ./experiments/experiment2.sh
 
 # 1 2 0 0
-python train_bidirectional_dist.py \
+python train_bidirectional.py \
   test --add_input --learn_prior --fp16 --switch-time 0.5 \
   --train_batch_size 1 --val_batch_size 1 --test_batch_size 1 \
   --short_seq_len 1024 --long_seq_len 1024 \

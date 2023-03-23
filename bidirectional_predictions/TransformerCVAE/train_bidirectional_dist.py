@@ -196,7 +196,7 @@ def main_worker(gpu, ngpus_per_node, args):
         for _ in range(args.reload_batches):
             next(train_iter)
 
-    logger.info(f"Resume training from epoch {args.reload_epoch}, batch {args.reload_batches}")
+        logger.info(f"Resume training from epoch {args.reload_epoch}, batch {args.reload_batches}")
 
     optimizer.zero_grad()
     beta = args.beta_0
