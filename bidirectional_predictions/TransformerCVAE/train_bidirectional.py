@@ -363,11 +363,10 @@ def main():
                         else:
                             raise e
 
-                    if args.rank == 0 and num_iters % 100 == 0:
+                    if num_iters % 100 == 0:
                         logger.info(f"CURRENT ITERATION: {num_iters}")
                         logger.info(f"CURRENT LOSS: Loss: {loss}, CE: {ce_loss}, KL: {kl_loss}")
 
-                    if args.rank == 0:
                         lr = scheduler.get_last_lr()[0]
                         # Log to Tensorboard
                         t_writer.add_scalar('loss', loss, num_iters)
@@ -394,7 +393,7 @@ def main():
                         beta = args.beta_0
                         logger.info('KL annealing restart')
 
-                    if args.rank == 0 and num_iters % 10000 == 0:
+                    if num_iters % 10000 == 0:
                         eval_step()
                         logger.info('Saving model...')
                         logger.info("Iteration completed: %d, remained %d" % (num_iters, args.iterations - num_iters))
