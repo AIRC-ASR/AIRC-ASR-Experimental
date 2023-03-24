@@ -12,4 +12,4 @@ python train_bidirectional.py \
   --fwd_loss_weight 1 --bkwd_loss_weight 0 --all_sentence_loss_weight 0 \
   --prompt_loss_weight 0 \
 #  --reload_path "out/test/model_0040000_bidirectional_1.0_2.0_0.0_0.0.pt" \
-#  --reload_epoch 0 --reload_iters 40000 --reload_batches 20
+#  -reload_iters 40000
