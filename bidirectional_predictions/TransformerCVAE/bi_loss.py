@@ -73,7 +73,7 @@ def bidirectional_loss(loss_type, VAE, optimizer, tokens_mask, tokens, mask, los
         # This runs the bidirectional training on the different levels
         if loss_type == "previous_sentence":
             try:
-                return bidirectional_two_sentences(VAE, optimizer, sentence_encodings, sentence_masks, mask, loss_fn, beta, model_type, curr_seq_len, input_tokens, sentence_directions)
+                return bidirectional_two_sentences(VAE, optimizer, sentence_encodings, sentence_masks, mask, loss_fn, beta, model_type, curr_seq_len, input_tokens, sentence_directions, curr_batch_size)
             except RuntimeError as e:
                 print(e)
                 raise("RuntimeError: bidirectional_two_sentences()")
@@ -113,12 +113,14 @@ def bidirectional_all_previous_sentences(VAE, optimizer, sentence_encodings, sen
     total_ce_loss_all_previous_sentences = 0
     total_kl_loss_sentence_all_previous_sentences = 0
 
+    # [0, 1]
     for batch_idx in range(curr_batch_size):
         prev_encodings = None
         prev_masks = None
         batch_losses = []
 
         for idx in range(len(sentence_encodings[batch_idx])):
+            # [2, 1023, 768], [0, 1023, 768], [1, 1023, 768]
             y_sentence_encoding = sentence_encodings[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
             y_sentence_mask = sentence_masks[batch_idx, idx][0: input_tokens.shape[1]].unsqueeze(0)
 
@@ -145,9 +147,12 @@ def bidirectional_all_previous_sentences(VAE, optimizer, sentence_encodings, sen
 
 
 def bidirectional_two_sentences(VAE, optimizer, sentence_encodings, sentence_masks, mask, 
-                                loss_fn, beta, model_type, curr_seq_len, input_tokens, sentence_directions):
+                                loss_fn, beta, model_type, curr_seq_len, input_tokens, sentence_directions,
+                                curr_batch_size):
     '''This function finds the loss for the bidirectional training of the previous sentence.'''
     # Compute the number of pairwise comparisons to be made
+    # (2, 5, 1023), (2, 6, 1023)
+    # Dimension of sentence_encodings and sentence_masks: (curr_batch_size, len(sentences), curr_seq_len)
     num_pairs = sentence_encodings.shape[0]
 
     def compute_loss(pair_idx):
