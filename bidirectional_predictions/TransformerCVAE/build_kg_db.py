@@ -42,12 +42,14 @@ if __name__ == '__main__':
   for title in titles:
     kg = from_text_to_kb(title)
     torch_kg = kg.to_torch_kg()
-    torch.save(torch_kg, os.path.join(args.data_dir, 'wikiPlots/kg', title + '.pt'))
+    if torch_kg is not None:
+      torch.save(torch_kg, os.path.join(args.data_dir, 'wikiPlots/kg', title + '.pt'))
 
   # Create knowledge graphs for each plot
   for plot in plots:
     kg = from_text_to_kb(plot)
     torch_kg = kg.to_torch_kg()
-    torch.save(torch_kg, os.path.join(args.data_dir, 'wikiPlots/kg', plot + '.pt'))    
+    if torch_kg is not None:
+      torch.save(torch_kg, os.path.join(args.data_dir, 'wikiPlots/kg', plot + '.pt'))    
 
   logger.info('Finished creating knowledge graphs.')
