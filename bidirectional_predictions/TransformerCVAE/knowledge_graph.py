@@ -87,7 +87,7 @@ class KB():
             kb_dict["rel"].append(rel["type"])
 
         # print('self.relations', self.relations)
-        # print('kb_dict', kb_dict)
+        print('kb_dict', kb_dict)
         if len(kb_dict["from"]) == 0 or len(kb_dict["to"]) == 0 or len(kb_dict["rel"]) == 0:
             return None
         kb_frame = pd.DataFrame(kb_dict)
