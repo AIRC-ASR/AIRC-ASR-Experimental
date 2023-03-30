@@ -146,7 +146,7 @@ def run_model():
     parser.add_argument('--dataset', type=str, default='wi', choices=['wp', 'wi'], help="Dataset to use for training")
 
     # use GPU
-    parser.add_argument('--gpu', default=2, type=int)
+    parser.add_argument('--gpu', default=0, type=int)
     parser.add_argument('--no_gpu', action="store_true")
 
     parser.add_argument('--add_input', action="store_true")
@@ -156,7 +156,8 @@ def run_model():
 
     parser.add_argument('--learn_prior', action="store_true")
 
-    args = parser.parse_args('--model-path out/test/model_latest.pt '
+    args = parser.parse_args('--model-path out/test/model_0101642_bidirectional_1.0_0.0_0.0_0.0.pt '
+                             '--batch_size 3 --nsamples 3 '
                              '--add_input --learn_prior '.split())
     print(args)
 
@@ -179,6 +180,7 @@ def run_model():
 
     if args.batch_size == -1:
         args.batch_size = 1
+    print("AAA", args.nsamples)
     assert args.nsamples % args.batch_size == 0
 
     # logging

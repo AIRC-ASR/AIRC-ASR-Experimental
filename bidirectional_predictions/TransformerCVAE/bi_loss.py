@@ -153,31 +153,30 @@ def bidirectional_two_sentences(VAE, optimizer, sentence_encodings, sentence_mas
     # Compute the number of pairwise comparisons to be made
     # (2, 5, 1023), (2, 6, 1023)
     # Dimension of sentence_encodings and sentence_masks: (curr_batch_size, len(sentences), curr_seq_len)
-    num_pairs = sentence_encodings.shape[0]
 
-    def compute_loss(pair_idx):
+    def compute_loss(pair_idx, batch_idx):
         total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a, \
             total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b = 0, 0, 0, 0, 0, 0
         
-        if len(sentence_encodings[pair_idx]) < 2:
+        if len(sentence_encodings[batch_idx, pair_idx]) < 2:
             return 0, 0, 0, 0, 0, 0
         
         # Get sentence pair encodings and masks
-        encoding_a = sentence_encodings[pair_idx][0][:min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
-        mask_a = sentence_masks[pair_idx][0][:min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
-        encoding_b = sentence_encodings[pair_idx][1][:min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
-        mask_b = sentence_masks[pair_idx][1][:min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
+        encoding_a = sentence_encodings[batch_idx, pair_idx, :min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
+        mask_a = sentence_masks[batch_idx, pair_idx, :min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
+        encoding_b = sentence_encodings[batch_idx, pair_idx, :min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
+        mask_b = sentence_masks[batch_idx, pair_idx, :min(curr_seq_len - 1, input_tokens.shape[1])].unsqueeze(0)
 
-        if sentence_directions[pair_idx, 1] == 0 or sentence_directions[pair_idx, 1] == 2:
+        if sentence_directions[batch_idx, pair_idx] == 0 or sentence_directions[batch_idx, pair_idx] == 2:
             # Compute loss for Sentence B -> Sentence A
             output_sentence_b_a = train_step(VAE, optimizer, encoding_b, mask_b, encoding_a, mask_a,
-                                            encoding_b, encoding_a, mask, loss_fn, beta, model_type)
+                                            encoding_b, encoding_a, mask[batch_idx], loss_fn, beta, model_type)
             total_loss_sentence_b_a, total_ce_loss_sentence_b_a, total_kl_loss_sentence_b_a = output_sentence_b_a[-1]
 
-        if sentence_directions[pair_idx, 1] == 0 or sentence_directions[pair_idx, 1] == 2:
+        if sentence_directions[batch_idx, pair_idx] == 0 or sentence_directions[batch_idx, pair_idx] == 2:
             # Compute loss for Sentence A -> Sentence B
             output_sentence_a_b = train_step(VAE, optimizer, encoding_a, mask_a, encoding_b, mask_b,
-                                            encoding_a, encoding_b, mask, loss_fn, beta, model_type)
+                                            encoding_a, encoding_b, mask[batch_idx], loss_fn, beta, model_type)
             total_loss_sentence_a_b, total_ce_loss_sentence_a_b, total_kl_loss_sentence_a_b = output_sentence_a_b[-1]
 
         # Return the losses for this pair
@@ -185,16 +184,19 @@ def bidirectional_two_sentences(VAE, optimizer, sentence_encodings, sentence_mas
                 total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b)
 
     # Use multithreading to compute losses for all pairwise sentence combinations
-    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-        # Start all the threads
-        futures = [executor.submit(compute_loss, idx) for idx in range(num_pairs)]
-        # Wait for all the threads to finish and get the results
-        results = [f.result() for f in as_completed(futures)]
+    for batch_idx in range(curr_batch_size):
+        num_pairs = sentence_encodings[batch_idx].shape[0]
 
-    # Sum the losses and normalize the losses for all the pairs
-    losses = [sum(r[i] for r in results) / num_pairs for i in range(len(results[0]))]
-    total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a, \
-        total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b = losses
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            # Start all the threads
+            futures = [executor.submit(compute_loss, idx, batch_idx) for idx in range(num_pairs)]
+            # Wait for all the threads to finish and get the results
+            results = [f.result() for f in as_completed(futures)]
+
+        # Sum the losses and normalize the losses for all the pairs
+        losses = [sum(r[i] for r in results) / num_pairs for i in range(len(results[0]))]
+        total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a, \
+            total_ce_loss_sentence_a_b, total_kl_loss_sentence_b_a, total_kl_loss_sentence_a_b = losses
 
     # Return the total losses
     return (total_loss_sentence_b_a, total_loss_sentence_a_b, total_ce_loss_sentence_b_a,

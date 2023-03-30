@@ -11,5 +11,5 @@ python train_bidirectional.py \
   --short_seq_len 1024 --long_seq_len 1024 \
   --fwd_loss_weight 1 --bkwd_loss_weight 0 --all_sentence_loss_weight 0 \
   --prompt_loss_weight 0 \
-#  --reload_path "out/test/model_0040000_bidirectional_1.0_2.0_0.0_0.0.pt" \
-#  -reload_iters 40000
+ --reload_path "out/test/model_0101642_bidirectional_1.0_0.0_0.0_0.0.pt" \
+ --reload_iters 0

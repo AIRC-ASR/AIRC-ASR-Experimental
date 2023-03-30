@@ -82,11 +82,7 @@ def main():
     parser.add_argument('--reload_iters', type=int, default=0)
 
     # NOTE: Use for changing the arguments of the program
-    args = parser.parse_args('test --add_input --learn_prior --fp16 --iterations 101642 --switch-time 0.5 '
-                             '--train_batch_size 1 --val_batch_size 1 --test_batch_size 1 '
-                             '--short_seq_len 1024 --long_seq_len 1024 '
-                             '--fwd_loss_weight 1 --bkwd_loss_weight 0 --all_sentence_loss_weight 0.0 '
-                             '--prompt_loss_weight 0.0 '.split())
+    args = parser.parse_args()
 
     if args.model_type == 'cvae':
         args.learn_prior = True
