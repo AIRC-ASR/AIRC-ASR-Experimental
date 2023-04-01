@@ -4,15 +4,23 @@ This repo contains code for DOC: Improving Long Story Coherence With Detailed Ou
 
 ## Installation / Data
 
-(1) Install Python 3.8.15 and PyTorch 1.13.1 (slightly older/newer versions are probably also fine for both).
-(2) Install the remaining requirements via `pip install -r requirements.txt`. You may need to also run `pip install -U sentence-transformers` if you get crashes related to `huggingface_hub.snapshot_download` later.
-(3) Install this repo with `pip install -e .`.
+(1) Install Python 3.8.15 (slightly older/newer versions are probably fine).
+(2) python3.8 -m venv kg_plan_env
+(3) source kg_plan_env/bin/activate
+(4) Install the requirements via `pip install -r requirements.txt`. You may need to also run `pip install -U sentence-transformers` if you get crashes related to `huggingface_hub.snapshot_download` later.
+(5) Install this repo with `pip install -e .`.
 
 Also run `export OPENAI_API_KEY=$YOUR_API_KEY` in your terminal so that the code can call the GPT3 API with your key. 
 
 Meanwhile, run `wget https://doc-story-generation-data.s3.amazonaws.com/doc_data.zip` and unzip the folder to the top level of this repo. This folder contains pretrained controller/reranker ckpts and data used to train controllers/rerankers. 
 
 To get the final generated stories and Surge AI annotation results from our main experiments run `wget https://doc-story-generation-data.s3.amazonaws.com/doc_outputs.zip` (note: some generated stories may contain sensitive/NSFW content, since we didn't attempt to filter these).
+
+If there is difficulty installing Python Levenshtein, try the following:
+sudo apt-get install python3.8-dev
+
+If there is difficulty setting up a Python 3.8 virtual environment, try the following:
+sudo apt install python3.8-venv
 
 ## Plan + Outline Generation
 
@@ -156,13 +164,3 @@ CUDA_VISIBLE_DEVICES=0 python scripts/training/train_controller.py --controller-
 
 If you want to retrain the relevance and coherence rerankers yourself, follow the instructions in https://github.com/yangkevin2/emnlp22-re3-story-generation, since ours are unchanged from theirs.
 
-### Setup for the project
-python3.8 -m venv kg_plan_env
-source kg_plan_env/bin/activate
-pip install -r requirements.txt
-
-If there is difficulty installing Python Levenshtein, try the following:
-sudo apt-get install python3.8-dev
-
-If there is difficulty setting up a Python 3.8 virtual environment, try the following:
-sudo apt install python3.8-venv

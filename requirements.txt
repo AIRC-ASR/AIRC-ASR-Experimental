@@ -12,3 +12,8 @@ scipy
 bert-serving
 bert-serving-client
 scikit-learn
+pandas
+tqdm
+pyvis
+wikipedia
+torchkge

@@ -3,8 +3,10 @@ venv/
 .vscode
 creds
 bidirectional_predictions/TransformerCVAE/apex
+bidirectional_predictions/TransformerCVAE/data/
 bidirectional_predictions/TransformerCVAE/data/__pycache__
 bidirectional_predictions/TransformerCVAE/__pycache__
 bidirectional_predictions/TransformerCVAE/out/*
 bidirectional_predictions/TransformerCVAE/data/wikiPlots
 bidirectional_predictions/TransformerCVAE/slurm_outputs
+kg_plan_rewrite/doc_data/

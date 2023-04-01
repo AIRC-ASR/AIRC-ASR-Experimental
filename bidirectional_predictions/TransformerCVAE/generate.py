@@ -156,7 +156,7 @@ def run_model():
 
     parser.add_argument('--learn_prior', action="store_true")
 
-    args = parser.parse_args('--model-path out/test/model_latest.pt '
+    args = parser.parse_args('--model-path out/test/model_0101642_bidirectional_1.0_0.0_0.0_0.0.pt '
                              '--add_input --learn_prior '.split())
     print(args)
 
@@ -168,7 +168,7 @@ def run_model():
     # GPU
     if not torch.cuda.is_available(): args.no_gpu = True
     gpu = not args.no_gpu
-    if gpu: torch.cuda.set_device(args.gpu)
+    # if gpu: torch.cuda.set_device(args.gpu)
     device = torch.device(args.gpu if gpu else "cpu")
 
     # randomness

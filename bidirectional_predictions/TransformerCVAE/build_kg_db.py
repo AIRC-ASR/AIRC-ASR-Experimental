@@ -46,14 +46,18 @@ if __name__ == '__main__':
     os.makedirs(os.path.join(args.data_dir, 'wikiPlots/kg/plots'))
 
   PARALLEL = True
+  LAST_EPOCH = 24215
 
   if PARALLEL:
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
       futures = []
-      for title in titles:
-        futures.append(executor.submit(from_text_to_kb, title))
-
       i = 0
+      for title in titles:
+        if i > LAST_EPOCH:
+          futures.append(executor.submit(from_text_to_kb, title))
+        i += 1
+
+      i = LAST_EPOCH
       for future in as_completed(futures):
         kg = future.result()
         torch_kg = kg.to_torch_kg()
@@ -62,12 +66,15 @@ if __name__ == '__main__':
 
         i += 1
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
       futures = []
-      for plot in plots:
-        futures.append(executor.submit(from_text_to_kb, plot))
-
       i = 0
+      for plot in plots:
+        if i > LAST_EPOCH:
+          futures.append(executor.submit(from_text_to_kb, plot))
+        i += 1
+
+      i = LAST_EPOCH
       for future in as_completed(futures):
         kg = future.result()
         torch_kg = kg.to_torch_kg()
