@@ -44,7 +44,7 @@ class KB():
             }
             return entity_data
         except:
-            print("HI")
+            # print("HI")
             return None
 
     def add_entity(self, e):
@@ -53,8 +53,8 @@ class KB():
     def add_relation(self, r):
         # check on wikipedia
         candidate_entities = [r["head"], r["tail"]]
-        for ent in candidate_entities:
-            print("ENT", ent)
+        # for ent in candidate_entities:
+            # print("ENT", ent)
         entities = [self.get_wikipedia_data(ent) for ent in candidate_entities]
 
         # if one entity does not exist, stop
@@ -86,8 +86,10 @@ class KB():
             kb_dict["to"].append(rel["tail"])
             kb_dict["rel"].append(rel["type"])
 
-        print('self.relations', self.relations)
+        # print('self.relations', self.relations)
         print('kb_dict', kb_dict)
+        if len(kb_dict["from"]) == 0 or len(kb_dict["to"]) == 0 or len(kb_dict["rel"]) == 0:
+            return None
         kb_frame = pd.DataFrame(kb_dict)
         return KnowledgeGraph(df=kb_frame)
 
