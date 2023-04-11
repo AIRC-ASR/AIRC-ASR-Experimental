@@ -1,0 +1,16 @@
+# Fine-tuning parameters
+batch_size: 1
+learning_rate: 1.0e-5
+num_epochs: 3
+max_seq_length: 256
+max_length: 256
+coherence_coeff: 0.5
+relevance_coeff: 0.3
+diversity_coeff: 0.2
+max_grad_norm: 2.0
+
+# Checkpoints File Path
+save_dir: checkpoints/
+
+# Model architecture
+model_name: facebook/opt-350m

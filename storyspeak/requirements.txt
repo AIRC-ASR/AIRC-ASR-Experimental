@@ -1,0 +1,12 @@
+torch
+transformers
+tdqm
+nltk
+rouge
+jiwer
+loguru
+datasets
+librosa
+soundfile
+torchaudio
+speechbrain
