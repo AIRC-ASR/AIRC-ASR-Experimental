@@ -1,0 +1,12 @@
+# Evaluation metrics
+batch_size: 24
+learning_rate: 1.0e-5
+num_epochs: 3
+max_seq_length: 256
+max_length: 256
+
+# Checkpoints File Path
+save_dir: checkpoints/
+
+# Model architecture
+model_name: facebook/opt-350m

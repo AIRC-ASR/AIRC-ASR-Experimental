@@ -1,0 +1,5 @@
+Coherence ensures that the responses are logically connected to the conversation,
+relevance ensures that the responses are appropriate to the user's input, and
+diversity ensures that the responses are varied and interesting. By optimizing
+for these three factors, the chatbot can provide high-quality, engaging responses
+that are more likely to satisfy users and keep them engaged with the chatbot.
