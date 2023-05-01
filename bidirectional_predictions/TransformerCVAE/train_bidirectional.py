@@ -221,7 +221,7 @@ def main():
     logger.info("Begin training iterations")
     max_val_batches = 20000  # max num. of val batches
     logger.info("Total iteration: %d" % args.iterations)
-    e = 0  # number of epoch
+    curr_epoch = 0  # number of epoch
     num_iters = 0
     i = 0
 
@@ -230,7 +230,7 @@ def main():
 
     if args.load:
 
-        e = args.reload_epoch
+        curr_epoch = args.reload_epoch
         num_iters = args.reload_iters
         i = args.reload_batches
 
@@ -322,10 +322,10 @@ def main():
 
     # eval_step()
     torch.save(VAE.state_dict(), os.path.join(save_folder,
-        f'model_{e}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
+        f'model_{curr_epoch}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
     )
 
-    while e < args.num_epochs:
+    while curr_epoch < args.num_epochs:
         while num_iters < args.iterations:
             # Run epoch
             st = time.time()
@@ -400,7 +400,7 @@ def main():
                         logger.info("Iteration completed: %d, remained %d" % (num_iters, args.iterations - num_iters))
                         logger.info('\n------------------------------------------------------')
                         torch.save(VAE.state_dict(), os.path.join(save_folder,
-                            f'model_{e}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
+                            f'model_{curr_epoch}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
                         )
 
                     if args.switch_time > 0 and num_iters == int(args.iterations * args.switch_time):
@@ -425,17 +425,17 @@ def main():
 
             logger.info('Saving model...')
             torch.save(VAE.state_dict(), os.path.join(save_folder,
-                f'model_{e}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
+                f'model_{curr_epoch}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
             )
             num_iters += 1
 
         num_iters = 0
-        e += 1
-        logger.info("Training loop. The ith epoch completed: %d" % e)
+        curr_epoch += 1
+        logger.info("Training loop. The ith epoch completed: %d" % curr_epoch)
 
     # Save the final model
     torch.save(VAE.state_dict(), os.path.join(save_folder,
-        f'model_{e}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
+        f'model_{curr_epoch}_{num_iters:07d}_{i}_bidirectional_{args.fwd_loss_weight}_{args.bkwd_loss_weight}_{args.all_sentence_loss_weight}_{args.prompt_loss_weight}.pt')
     )
     logger.info("Training complete.")
 

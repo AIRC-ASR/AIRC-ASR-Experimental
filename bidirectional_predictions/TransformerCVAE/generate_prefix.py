@@ -10,7 +10,6 @@ from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Config
 from tqdm import tqdm
 from tqdm import trange
 import importlib
-import logging
 import copy
 from data.util import *
 from collections import Counter
@@ -20,6 +19,7 @@ from rouge import Rouge
 from util import *
 
 from model import *
+import logging
 
 
 def top_k_top_p_filtering(logits, top_k=100, top_p=0.95, filter_value=-float('Inf')):
@@ -156,7 +156,7 @@ def run_model():
 
     parser.add_argument('--learn_prior', action="store_true")
 
-    args = parser.parse_args('--model-path out/wi.1.proj_vary_cyc_cvae/model_0030000.pt '
+    args = parser.parse_args('--model-path out/test/model_0101642_bidirectional_1.0_0.0_0.0_0.0.pt '
                              '--add_input --learn_prior '.split())
     print(args)
 
@@ -198,6 +198,7 @@ def run_model():
     gpt2_model = GPT2LMHeadModel.from_pretrained('gpt2', cache_dir=cache_dir)
     print('gpt2_params:', num_params(gpt2_model))  # gpt2: 124439808
     config = GPT2Config()
+    config.n_ctx = 1024
 
     # # add special tokens
     # special_tokens_dict = {
