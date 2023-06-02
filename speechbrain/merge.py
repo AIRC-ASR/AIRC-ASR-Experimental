@@ -1,62 +1,57 @@
 import difflib
 from nltk.metrics.distance import edit_distance
 
-def mergeHypotheses(reference, hypothesis1, hypothesis2):
-    merged = ""
-    reference_words = reference.split()
-    hypothesis1_words = hypothesis1.split()
-    hypothesis2_words = hypothesis2.split()
-    errors = 0
+# Import necessary libraries
+from difflib import get_close_matches
 
-    for i in range(len(reference_words)):
-        if i < len(hypothesis1_words):
-            if hypothesis1_words[i] != reference_words[i]:
-                if i < len(hypothesis2_words):
-                    if hypothesis2_words[i] != reference_words[i]:
-                        merged += hypothesis2_words[i] + " "
-                        errors += 1
-                    else:
-                        merged += hypothesis1_words[i] + " "
-                else:
-                    merged += hypothesis1_words[i] + " "
-                    errors += 1
+import enchant
+
+# Create an instance of the Enchant dictionary for English
+en_dict = enchant.Dict("en_US")
+
+# Function to generate alternative suggestions for a misspelled word
+def generate_alternative_suggestions(word):
+    suggestions = en_dict.suggest(word)
+    return suggestions
+
+def is_word_uncertain(word):
+  return not en_dict.check(word)
+
+# Function to score alternative suggestions
+def score_suggestions(word, suggestions):
+    # Calculate the similarity score between the word and suggestions
+    scores = [(suggestion, similarity_score(word, suggestion)) for suggestion in suggestions]
+    return scores
+
+# Function to calculate the similarity score between two words
+def similarity_score(word1, word2):
+    # You can use different similarity metrics here (e.g., Levenshtein distance, Jaccard similarity)
+    # For simplicity, let's use a basic approach based on the length of common characters
+    common_chars = set(word1) & set(word2)
+    score = len(common_chars) / max(len(word1), len(word2))
+    return score
+
+# Function to improve hypothesis 1
+def improve_hypothesis(hypothesis):
+    improved_words = []
+    words = hypothesis.split()
+    
+    for word in words:
+        if is_word_uncertain(word):
+            suggestions = generate_alternative_suggestions(word)
+            scored_suggestions = score_suggestions(word, suggestions)
+            
+            if scored_suggestions:
+                best_suggestion = max(scored_suggestions, key=lambda x: x[1])[0]
+                improved_words.append(best_suggestion)
             else:
-                merged += hypothesis1_words[i] + " "
-        elif i < len(hypothesis2_words):
-            if hypothesis2_words[i] != reference_words[i]:
-                merged += hypothesis2_words[i] + " "
-                errors += 1
-            else:
-                merged += reference_words[i] + " "
+                improved_words.append(word)  # Keep the original word if no suggestions found
         else:
-            merged += reference_words[i] + " "
+            improved_words.append(word)
+    
+    improved_hypothesis = " ".join(improved_words)
 
-    merged_hypothesis = merged.strip()
-    hypothesis1_wer = calculateWER(reference, hypothesis1)
-    merged_wer = calculateWER(reference, merged_hypothesis)
-
-    if merged_wer > hypothesis1_wer:
-        return hypothesis1
-    else:
-        return merged_hypothesis
-
-
-def calculateWER(reference, hypothesis):
-    reference_words = reference.split()
-    hypothesis_words = hypothesis.split()
-    errors = 0
-
-    for i in range(len(reference_words)):
-        if i < len(hypothesis_words):
-            if hypothesis_words[i] != reference_words[i]:
-                errors += 1
-        else:
-            errors += 1
-
-    return errors / len(reference_words)
-
-
-
+    return improved_hypothesis
 
 def calculateWER(reference, hypothesis):
     reference_words = reference.split()
@@ -121,26 +116,26 @@ if __name__ == '__main__':
   references = [reference_a, reference_b, reference_c, reference_d, reference_e, reference_f, reference_g, reference_h, reference_i]
   hypothesis1s = [hypothesis1_a, hypothesis1_b, hypothesis1_c, hypothesis1_d, hypothesis1_e, hypothesis1_f, hypothesis1_g, hypothesis1_h, hypothesis1_i]
   hypothesis2s = [hypothesis2_a, hypothesis2_b, hypothesis2_c, hypothesis2_d, hypothesis2_e, hypothesis2_f, hypothesis2_g, hypothesis2_h, hypothesis2_i]
-  merged_hypotheses = [
-    mergeHypotheses(reference_a, hypothesis1_a, hypothesis2_a),
-    mergeHypotheses(reference_b, hypothesis1_b, hypothesis2_b),
-    mergeHypotheses(reference_c, hypothesis1_c, hypothesis2_c),
-    mergeHypotheses(reference_d, hypothesis1_d, hypothesis2_d),
-    mergeHypotheses(reference_e, hypothesis1_e, hypothesis2_e),
-    mergeHypotheses(reference_f, hypothesis1_f, hypothesis2_f),
-    mergeHypotheses(reference_g, hypothesis1_g, hypothesis2_g),
-    mergeHypotheses(reference_h, hypothesis1_h, hypothesis2_h),
-    mergeHypotheses(reference_i, hypothesis1_i, hypothesis2_i)
+  improved_hypotheses = [
+    improve_hypothesis(hypothesis1_a),
+    improve_hypothesis(hypothesis1_b),
+    improve_hypothesis(hypothesis1_c),
+    improve_hypothesis(hypothesis1_d),
+    improve_hypothesis(hypothesis1_e),
+    improve_hypothesis(hypothesis1_f),
+    improve_hypothesis(hypothesis1_g),
+    improve_hypothesis(hypothesis1_h),
+    improve_hypothesis(hypothesis1_i)
   ]
   print("Baseline WERs:")
   for i in range(len(references)):
     print("Reference:", references[i])
     print("Hypothesis 1:", hypothesis1s[i])
     print("Hypothesis 2:", hypothesis2s[i])
-    print("Merged Hypothesis:", merged_hypotheses[i])
+    print("Improved Hypothesis:", improved_hypotheses[i])
     print("WER 1:", calculateWER(references[i], hypothesis1s[i]))
     print("WER 2:", calculateWER(references[i], hypothesis2s[i]))
-    print("WER Merged:", calculateWER(references[i], merged_hypotheses[i]))
+    print("WER Improved:", calculateWER(references[i], improved_hypotheses[i]))
     print()
 
   ##### Find the merged hypothesis #####
