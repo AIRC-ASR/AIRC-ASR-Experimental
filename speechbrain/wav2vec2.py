@@ -183,7 +183,7 @@ class CustomEncoder(EncoderASR):
 
         return all_hypothesis_words, all_word_scores
 
-    def transcribe_batch(self, wavs, wav_lens, top_k=1, substitution_threshold=0.55):
+    def transcribe_batch(self, wavs, wav_lens, top_k=1, substitution_threshold=0.5):
         """Transcribes the input audio into a sequence of words
 
         The waveforms should already be in the model's desired format.
@@ -242,11 +242,10 @@ class CustomEncoder(EncoderASR):
                         if substitute_word is not None:
                             substitute_word_length = len(substitute_word)
                             start_index = hypothesis_string.index(hypothesis_word)
-                            print("A", predictions[0][i], i)
                             predicted_words[0][i] = predicted_words[0][i][:start_index] + [char for char in substitute_word] + predicted_words[0][i][start_index + substitute_word_length:]
                             predictions[0][i] = predictions[0][i][:start_index] + [self.tokenizer.encode_sequence(char)[0] for char in substitute_word] + predictions[0][i][start_index + substitute_word_length:]
                             scores[0][i] = scores[0][i][:start_index] + [torch.tensor(1.0) for char in substitute_word] + scores[0][i][start_index + substitute_word_length:]
-                            print(f'Substituted {hypothesis_word} for {substitute_word}', substitute_word_length, start_index, hypothesis_string[start_index:start_index+substitute_word_length])
+                            print(f'Substituted {hypothesis_word} for {substitute_word}')
 
                             # Sanity checks
                             assert(len(predictions[0][i]) == len(scores[0][i]) == len(predicted_words[0][i]))
