@@ -4,12 +4,15 @@ import numpy
 import sentencepiece
 import speechbrain
 from speechbrain.pretrained import EncoderASR
+from SoundsLike.SoundsLike import Search
+
 import torch
 from itertools import *
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
 import tensorflow_io
+import Levenshtein
 
 
 def safe_join(fragments: list[str], joiner=""):
@@ -79,12 +82,113 @@ class CustomEncoder(EncoderASR):
             batch_scores.append(scores)
         return batch_preds, batch_scores
 
-    def transcribe_batch(self, wavs, wav_lens, top_k=1):
+    def generate_substitutions(self, word):
+        """
+        Generates a list of possible substitutions for a given word
+        using algorithms based on phonetic similarity.
+
+        Arguments
+        ---------
+        word : str
+            The word to be substituted
+
+        Returns
+        -------
+        list
+            List of possible substitutions
+        """
+        try:
+            substitutions = Search.closeHomophones(word)
+            substitutions = [word_.upper() for word_ in substitutions]
+            if word in substitutions:
+                substitutions.remove(word)
+            
+            # Remove substitutions that cannot be encoded by the tokenizer
+            for i, substitute_word in enumerate(substitutions):
+                for char in substitute_word:
+                    try:
+                        self.tokenizer.encode_sequence(char)
+                    except KeyError:
+                        del substitutions[i]
+                        break
+
+            return substitutions
+        except ValueError:
+            return []
+
+
+    def select_best_substitution(self, substitutions, hypothesis):
+        """
+        Selects the best substitution for a given hypothesis from a list of possible substitutions.
+
+        Arguments
+        ---------
+        substitutions : list
+            List of possible substitutions
+        hypothesis : str
+            The hypothesis to be substituted
+        
+        Returns
+        -------
+        str
+            The best substitution
+        """
+        min_distance = float('inf')
+        best_substitution = None
+
+        for substitution in substitutions:
+            distance = Levenshtein.distance(substitution, hypothesis)
+            if distance < min_distance:
+                min_distance = distance
+                best_substitution = substitution
+
+        return best_substitution
+
+    def find_all_hypothesis_and_word_scores(self, predictions, scores, predicted_words):
+        all_hypothesis_words = []
+        all_word_scores = []
+
+        for i in range(len(predictions)):
+            for j in range(len(predictions[i])):
+                hypothesis_sentence = "".join(predicted_words[i][j])
+                hypothesis_words = hypothesis_sentence.split()
+                word_scores = []
+                token_index = 0
+                for hypothesis_word in hypothesis_words:
+                    word_score = 0.0
+                    # Number of tokens in the word
+                    token_count = len(hypothesis_word)
+
+                    # Accumulate scores for each token in the word
+                    for _ in range(token_count):
+                        token_score = scores[i][j][token_index]
+                        word_score += token_score
+                        token_index += 1
+
+                    # Average the scores for the tokens in the word
+                    word_score /= token_count
+
+                    word_scores.append(word_score.item())
+
+                assert(len(hypothesis_words) == len(word_scores))
+
+                all_hypothesis_words.append(hypothesis_words)
+                all_word_scores.append(word_scores)
+            
+        assert(len(all_hypothesis_words) == len(all_word_scores))
+
+        # Normalize the word scores
+        max_score = max([max(scores) for scores in all_word_scores])
+        all_word_scores = [[score / max_score for score in scores] for scores in all_word_scores]
+
+        return all_hypothesis_words, all_word_scores
+
+    def transcribe_batch(self, wavs, wav_lens, top_k=1, substitution_threshold=0.55):
         """Transcribes the input audio into a sequence of words
 
         The waveforms should already be in the model's desired format.
         You can call:
-        ``normalized = EncoderASR.normalizer(signal, sample_rate)``
+        ``normalized = EncoderASR.normalzizer(signal, sample_rate)``
         to get a correctly converted signal in most cases.
 
         Arguments
@@ -109,6 +213,7 @@ class CustomEncoder(EncoderASR):
             wav_lens = wav_lens.to(self.device)
             encoder_out = self.encode_batch(wavs, wav_lens)
             predictions, scores = self.decode_probs(encoder_out, wav_lens, blank_id=0, top_k=top_k)
+            
             if isinstance(self.tokenizer, speechbrain.dataio.encoder.CTCTextEncoder):
                 predicted_words = [[self.tokenizer.decode_ndim(token_seq)
                                     for token_seq in predict_subset]
@@ -120,6 +225,31 @@ class CustomEncoder(EncoderASR):
                 ] for predict_subset in predictions]
             else:
                 sys.exit("The tokenizer must be sentencepiece or CTCTextEncoder")
+
+            # Sanity checks
+            assert(len(predictions) == len(scores) == len(predicted_words))
+            assert(len(predictions[0][0]) == len(scores[0][0]) == len(predicted_words[0][0]))
+
+            all_hypothesis_words, all_word_scores = self.find_all_hypothesis_and_word_scores(predictions, scores, predicted_words)
+
+            # Word substitution step
+            for i, (hypothesis_words, word_scores) in enumerate(zip(all_hypothesis_words, all_word_scores)):
+                hypothesis_string = " ".join(hypothesis_words)
+                for k, (hypothesis_word, word_score) in enumerate(zip(hypothesis_words, word_scores)):
+                    if word_score < substitution_threshold:
+                        substitutions = self.generate_substitutions(hypothesis_word)
+                        substitute_word = self.select_best_substitution(substitutions, hypothesis_word)
+                        if substitute_word is not None:
+                            substitute_word_length = len(substitute_word)
+                            start_index = hypothesis_string.index(hypothesis_word)
+                            print("A", predictions[0][i], i)
+                            predicted_words[0][i] = predicted_words[0][i][:start_index] + [char for char in substitute_word] + predicted_words[0][i][start_index + substitute_word_length:]
+                            predictions[0][i] = predictions[0][i][:start_index] + [self.tokenizer.encode_sequence(char)[0] for char in substitute_word] + predictions[0][i][start_index + substitute_word_length:]
+                            scores[0][i] = scores[0][i][:start_index] + [torch.tensor(1.0) for char in substitute_word] + scores[0][i][start_index + substitute_word_length:]
+                            print(f'Substituted {hypothesis_word} for {substitute_word}', substitute_word_length, start_index, hypothesis_string[start_index:start_index+substitute_word_length])
+
+                            # Sanity checks
+                            assert(len(predictions[0][i]) == len(scores[0][i]) == len(predicted_words[0][i]))
 
         return predicted_words, predictions, scores
 
@@ -168,7 +298,7 @@ def parse_mistakes(ref_text: str, hyp_tokens: list[str], scores: list[torch.Tens
 def summarize_reports(reports: list[dict], refs: list[str], hyp: list[list[list[str]]]):
     summary = {"ins": 0, "del": 0, "sub": 0, "total": 0, "words": 0}
 
-    print("Mistakes:\nReference -> Hypothesis")
+    # print("Mistakes:\nReference -> Hypothesis")
     for i in range(len(reports)):
         summary["ins"] += len(reports[i]["ins"])
         summary["del"] += len(reports[i]["del"])
@@ -184,7 +314,7 @@ def summarize_reports(reports: list[dict], refs: list[str], hyp: list[list[list[
                         continue
                     merged_str += f"{hyp[i][idx: idx + 2][j][k]}: {round(reports[i]['scores'][idx: idx + 2][j][k].item(), 2)}, "
                 merged_str += "| "
-            print(merged_str, "\n")
+            # print(merged_str, "\n")
 
         def join_words(words: list[list[str]]):
             joined = []
@@ -193,24 +323,24 @@ def summarize_reports(reports: list[dict], refs: list[str], hyp: list[list[list[
             return safe_join(joined, " ")
 
         for idx in reports[i]["ins"]:
-            print(f"Insertion: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
+            # print(f"Insertion: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
             score_map()
 
         for idx in reports[i]["del"]:
-            print(f"Deletion: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
+            # print(f"Deletion: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
             score_map()
 
         for idx in reports[i]["sub"]:
-            print(f"Substitution: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
+            # print(f"Substitution: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
             score_map()
 
     print("Total %WER {} [ {} errors / {} words, {} ins, {} del, {} sub ]".format(round(summary["total"] / summary["words"]*100, 2),
                                                                      summary["total"], summary["words"], summary['ins'], summary['del'], summary['sub']))
 
-    if summary["total"] > 0:
-        print("Out of {} errors: {}% ins, {}% del, {}% sub".format(summary["total"], round(summary["ins"] / summary["total"]*100, 2),
-                                                                   round(summary["del"] / summary["total"]*100, 2),
-                                                                   round(summary["sub"] / summary["total"]*100, 2)))
+    # if summary["total"] > 0:
+    #     print("Out of {} errors: {}% ins, {}% del, {}% sub".format(summary["total"], round(summary["ins"] / summary["total"]*100, 2),
+    #                                                                round(summary["del"] / summary["total"]*100, 2),
+    #                                                                round(summary["sub"] / summary["total"]*100, 2)))
 
 
 def main(max_samples=500, batch_size=1, top_k=1):
@@ -219,12 +349,7 @@ Reference:
 {ref}
 Hypothesis(es):
 {hyp}
-
-Top Scores:
-{tokens}
-{scores}
-
-    ======================
+======================
 """
 
     subset = "dev_clean"
@@ -241,7 +366,7 @@ Top Scores:
 
     for i in range(0, max_samples, batch_size):
         wavs, wav_lens, ref_texts = [], [], []
-        print(f"\nLoading batch {i // batch_size}...\n")
+        # print(f"\nLoading batch {i // batch_size}...\n")
         for _ in range(batch_size):
             sample = next(ds_iter)
             wav, wav_len, ref_text = sample["speech"].numpy(), sample["speech"].shape[0], sample['text'].numpy().decode()
@@ -273,7 +398,7 @@ Top Scores:
                 token_str += token.ljust(7) + "|"
                 score_str += str(round(scores[i][0][j].item(), 2)).ljust(7) + "|"
             print(PATTERN.format(ref=ref_texts[i], hyp=json.dumps(hyp_strs).replace('", ', '\n').
-                                 replace("[", "").replace("]", "").replace('"', ""), tokens=token_str, scores=score_str))
+                                 replace("[", "").replace("]", "").replace('"', "")))
 
     summarize_reports(all_reports, all_refs, all_hyps)
 
