@@ -183,7 +183,7 @@ class CustomEncoder(EncoderASR):
 
         return all_hypothesis_words, all_word_scores
 
-    def transcribe_batch(self, wavs, wav_lens, top_k=1, substitution_threshold=0.5):
+    def transcribe_batch(self, wavs, wav_lens, top_k=1, substitution_threshold=0):
         """Transcribes the input audio into a sequence of words
 
         The waveforms should already be in the model's desired format.
