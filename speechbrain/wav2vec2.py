@@ -5,6 +5,9 @@ import sentencepiece
 import speechbrain
 from speechbrain.pretrained import EncoderASR
 from SoundsLike.SoundsLike import Search
+import Levenshtein
+import fuzzy
+from transformers import pipeline
 
 import torch
 from itertools import *
@@ -82,7 +85,15 @@ class CustomEncoder(EncoderASR):
             batch_scores.append(scores)
         return batch_preds, batch_scores
 
-    def generate_substitutions(self, word):
+    def can_encode_token(self, token):
+        try:
+            self.tokenizer.encode_sequence(token)
+            return True
+        except KeyError:
+            return False
+
+
+    def generate_substitutions(self, sentence):
         """
         Generates a list of possible substitutions for a given word
         using algorithms based on phonetic similarity.
@@ -97,27 +108,15 @@ class CustomEncoder(EncoderASR):
         list
             List of possible substitutions
         """
-        try:
-            substitutions = Search.perfectHomophones(word)
-            substitutions = [word_.upper() for word_ in substitutions]
-            if word in substitutions:
-                substitutions.remove(word)
-            
-            # Remove substitutions that cannot be encoded by the tokenizer
-            for i, substitute_word in enumerate(substitutions):
-                for char in substitute_word:
-                    try:
-                        self.tokenizer.encode_sequence(char)
-                    except KeyError:
-                        del substitutions[i]
-                        break
-
-            return substitutions
-        except ValueError:
-            return []
+        unmasker = pipeline('fill-mask', model='bert-base-uncased')
+        unmasker_output = unmasker(sentence)
+        substitutions = [output['token_str'].upper() for output in unmasker_output]
+        filtered_substitutions = list(filter(lambda token: self.can_encode_token(token), substitutions))
+        print('filtered_substitutions', filtered_substitutions)
+        return filtered_substitutions
 
 
-    def select_best_substitution(self, substitutions, hypothesis):
+    def select_best_substitution(self, substitutions, hypothesis, levenshtein_weight = 0.6, phonetic_weight = 0.4):
         """
         Selects the best substitution for a given hypothesis from a list of possible substitutions.
 
@@ -133,16 +132,18 @@ class CustomEncoder(EncoderASR):
         str
             The best substitution
         """
-        min_distance = float('inf')
-        best_substitution = None
+        if not substitutions or len(substitutions) == 0:
+            return None
+        levenshtein_distances = [Levenshtein.distance(hypothesis, word) for word in substitutions]
+        fuzzy_distances = [Levenshtein.distance(fuzzy.nysiis(hypothesis), fuzzy.nysiis(word)) for word in substitutions]
+        
+        weighted_scores = [levenshtein_weight * levenshtein_distance + phonetic_weight * fuzzy_distance for levenshtein_distance, fuzzy_distance in zip(levenshtein_distances, fuzzy_distances)]
+        weights_and_words = list(zip(weighted_scores, substitutions))
+        sorted_words = [word for _, word in sorted(zip(weighted_scores, substitutions))]
 
-        for substitution in substitutions:
-            distance = Levenshtein.distance(substitution, hypothesis)
-            if distance < min_distance:
-                min_distance = distance
-                best_substitution = substitution
+        best_word = sorted_words[0]
 
-        return best_substitution
+        return best_word
 
     def find_all_hypothesis_and_word_scores(self, predictions, scores, predicted_words):
         all_hypothesis_words = []
@@ -183,7 +184,7 @@ class CustomEncoder(EncoderASR):
 
         return all_hypothesis_words, all_word_scores
 
-    def transcribe_batch(self, wavs, wav_lens, top_k=1, substitution_threshold=0.5):
+    def transcribe_batch(self, wavs, wav_lens, top_k=1, substitution_threshold=0.4):
         """Transcribes the input audio into a sequence of words
 
         The waveforms should already be in the model's desired format.
@@ -237,8 +238,11 @@ class CustomEncoder(EncoderASR):
                 hypothesis_string = " ".join(hypothesis_words)
                 for k, (hypothesis_word, word_score) in enumerate(zip(hypothesis_words, word_scores)):
                     if word_score < substitution_threshold:
-                        substitutions = self.generate_substitutions(hypothesis_word)
-                        print("Substitutions", substitutions)
+                        print("HYPOTHESIS WORD:", hypothesis_word)
+                        bert_input_sentence = hypothesis_string.lower().replace(hypothesis_word.lower(), "[MASK]", 1)
+                        print("BERT input sentence:", bert_input_sentence)
+                        substitutions = self.generate_substitutions(bert_input_sentence)
+                        print("Substitutions:", substitutions)
                         substitute_word = self.select_best_substitution(substitutions, hypothesis_word)
                         if substitute_word is not None:
                             substitute_word_length = len(substitute_word)

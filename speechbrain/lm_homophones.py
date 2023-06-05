@@ -1,5 +1,4 @@
 import Levenshtein
-import torch
 import fuzzy
 from transformers import pipeline
 
