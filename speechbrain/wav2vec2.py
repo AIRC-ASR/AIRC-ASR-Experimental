@@ -98,7 +98,7 @@ class CustomEncoder(EncoderASR):
             List of possible substitutions
         """
         try:
-            substitutions = Search.closeHomophones(word)
+            substitutions = Search.perfectHomophones(word)
             substitutions = [word_.upper() for word_ in substitutions]
             if word in substitutions:
                 substitutions.remove(word)
@@ -238,6 +238,7 @@ class CustomEncoder(EncoderASR):
                 for k, (hypothesis_word, word_score) in enumerate(zip(hypothesis_words, word_scores)):
                     if word_score < substitution_threshold:
                         substitutions = self.generate_substitutions(hypothesis_word)
+                        print("Substitutions", substitutions)
                         substitute_word = self.select_best_substitution(substitutions, hypothesis_word)
                         if substitute_word is not None:
                             substitute_word_length = len(substitute_word)
