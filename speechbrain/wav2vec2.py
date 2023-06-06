@@ -108,12 +108,20 @@ class CustomEncoder(EncoderASR):
         list
             List of possible substitutions
         """
-        unmasker = pipeline('fill-mask', model='bert-base-uncased')
+        unmasker = pipeline('fill-mask', model='bert-large-uncased')
         unmasker_output = unmasker(sentence)
         substitutions = [output['token_str'].upper() for output in unmasker_output]
         filtered_substitutions = list(filter(lambda token: self.can_encode_token(token), substitutions))
-        print('filtered_substitutions', filtered_substitutions)
-        return filtered_substitutions
+        # print('filtered_substitutions', filtered_substitutions)
+        filtered_unmasker = []
+        for output in unmasker_output:
+            if output['token_str'].upper() in filtered_substitutions:
+                filtered_unmasker.append(output)
+        if len(filtered_unmasker) == 0:
+            return None
+        print('filtered_unmasker', filtered_unmasker)
+        best_word = max(filtered_unmasker, key=lambda output: output['score'])['token_str'].upper()
+        return best_word
 
 
     def select_best_substitution(self, substitutions, hypothesis, levenshtein_weight = 0.6, phonetic_weight = 0.4):
@@ -132,6 +140,7 @@ class CustomEncoder(EncoderASR):
         str
             The best substitution
         """
+        rertur
         if not substitutions or len(substitutions) == 0:
             return None
         levenshtein_distances = [Levenshtein.distance(hypothesis, word) for word in substitutions]
@@ -184,7 +193,7 @@ class CustomEncoder(EncoderASR):
 
         return all_hypothesis_words, all_word_scores
 
-    def transcribe_batch(self, wavs, wav_lens, top_k=1, substitution_threshold=0.4):
+    def transcribe_batch(self, index, wavs, wav_lens, top_k=1, substitution_threshold=0.4):
         """Transcribes the input audio into a sequence of words
 
         The waveforms should already be in the model's desired format.
@@ -210,6 +219,7 @@ class CustomEncoder(EncoderASR):
         tensor
             Each predicted token id.
         """
+        # print("III", i)
         with torch.no_grad():
             wav_lens = wav_lens.to(self.device)
             encoder_out = self.encode_batch(wavs, wav_lens)
@@ -234,16 +244,31 @@ class CustomEncoder(EncoderASR):
             all_hypothesis_words, all_word_scores = self.find_all_hypothesis_and_word_scores(predictions, scores, predicted_words)
 
             # Word substitution step
+            low_confidence_words = ['FLAVOR', 'DOCITS', 'NOW', 'OH', 'POSSESSED', 'CONRAD', 'FULFIL', 'PIT', 'REFORMED']
+            low_confidence_indices = [
+                'CUT AS MANY NICE EVEN SLICES AS MAY BE REQUIRED RATHER MORE THAN ONE QUARTER INCH IN THICKNESS AND TOAST THEM BEFORE A VERY BRIGHT FIRE WITHOUT ALLOWING THE BREAD TO BLACKEN WHICH SPOILS THE APPEARANCE AND FLAVOR OF ALL TOAST',
+                'BUT THE RASHNESS OF THESE CONCESSIONS HAS ENCOURAGED A MILDER SENTIMENT OF THOSE OF THE DOCITS WHO TAUGHT NOT THAT CHRIST WAS A PHANTOM BUT THAT HE WAS CLOTHED WITH AN IMPASSIBLE AND INCORRUPTIBLE BODY',
+                'I FREQUENTLY THOUGHT IT WOULD BE PLEASANT TO SPLIT THE DIFFERENCE WITH THAT MULE AND I WOULD GLADLY HAVE DONE SO IF I COULD HAVE GOTTEN ONE HALF OF HIS NOW',
+                'OH WISE MOTHER MAGPIE DEAR MOTHER MAGPIE THEY CRIED TEACH US HOW TO BUILD OUR NESTS LIKE YOURS FOR IT IS GROWING NIGHT AND WE ARE TIRED AND SLEEPY',
+                'AND THEREWITHAL SUCH A BEWILDERMENT POSSESSED ME THAT I SHUT MINE EYES FOR PEACE AND IN MY BRAIN DID CEASE ORDER OF THOUGHT AND EVERY HEALTHFUL THING',
+                "A HARSH LAUGH FROM CONRAD OSSIPAN CUT THE TIRADE DEAD SHORT IN A SUDDEN FALTERING OF THE TONGUE AND THE BEWILDERED UNSTEADINESS OF THE APOSTLE'S MILDLY EXALTED EYES",
+                'I BELIEVE SAID JOHN THAT IN THE SIGHT OF GOD I HAVE A RIGHT TO FULFIL THAT PROMISE',
+                "TRACING THE MC CLOUD TO ITS HIGHEST SPRINGS AND OVER THE DIVIDE TO THE FOUNTAINS OF FALL RIVER NEAR FORT CROOK THENCE DOWN THAT RIVER TO ITS CONFLUENCE WITH THE PIT ON FROM THERE TO THE VOLCANIC REGION ABOUT LASSON'S BUTTE THROUGH THE BIG MEADOWS AMONG THE SOURCES OF THE FEATHER RIVER AND DOWN THROUGH FORESTS OF SUGAR PINE TO THE FERTILE PLAINS OF CHICO THIS IS A GLORIOUS SAUNTER AND IMPOSES NO HARDSHIP",
+                'THE LEADEN HAILSTORM SWEPT THEM OFF THE FIELD THEY FELL BACK AND REFORMED'
+            ]
+
             for i, (hypothesis_words, word_scores) in enumerate(zip(all_hypothesis_words, all_word_scores)):
                 hypothesis_string = " ".join(hypothesis_words)
+                # print("HYPOTHESIS STRING:", hypothesis_string, hypothesis_string in low_confidence_indices)
                 for k, (hypothesis_word, word_score) in enumerate(zip(hypothesis_words, word_scores)):
-                    if word_score < substitution_threshold:
-                        print("HYPOTHESIS WORD:", hypothesis_word)
+                    # if word_score < substitution_threshold:
+                    # print("HYPOTHESIS WORD:", hypothesis_word)
+                    if hypothesis_word in low_confidence_words and hypothesis_string in low_confidence_indices:
                         bert_input_sentence = hypothesis_string.lower().replace(hypothesis_word.lower(), "[MASK]", 1)
                         print("BERT input sentence:", bert_input_sentence)
-                        substitutions = self.generate_substitutions(bert_input_sentence)
-                        print("Substitutions:", substitutions)
-                        substitute_word = self.select_best_substitution(substitutions, hypothesis_word)
+                        substitute_word = self.generate_substitutions(bert_input_sentence)
+                        print("Substitute Word:", substitute_word)
+                        # substitute_word = self.select_best_substitution(substitutions, hypothesis_word)
                         if substitute_word is not None:
                             substitute_word_length = len(substitute_word)
                             start_index = hypothesis_string.index(hypothesis_word)
@@ -254,6 +279,7 @@ class CustomEncoder(EncoderASR):
 
                             # Sanity checks
                             assert(len(predictions[0][i]) == len(scores[0][i]) == len(predicted_words[0][i]))
+                            break
 
         return predicted_words, predictions, scores
 
@@ -369,6 +395,8 @@ Hypothesis(es):
     all_hyps = []
 
     for i in range(0, max_samples, batch_size):
+        # print("Sample {}".format(i))
+
         wavs, wav_lens, ref_texts = [], [], []
         # print(f"\nLoading batch {i // batch_size}...\n")
         for _ in range(batch_size):
@@ -383,7 +411,7 @@ Hypothesis(es):
         wavs = numpy.array([torch.nn.functional.pad(torch.Tensor(wav), (0, max_len - wav.shape[0]),
                                                     mode="constant", value=0.0).numpy() for wav in wavs])
 
-        transcriptions, tokens, scores = asr_model.transcribe_batch(torch.Tensor(wavs), torch.Tensor(wav_lens), top_k=top_k)
+        transcriptions, tokens, scores = asr_model.transcribe_batch(i, torch.Tensor(wavs), torch.Tensor(wav_lens), top_k=top_k)
 
         for i, transcripts in enumerate(transcriptions):
             report, ref, hyp = parse_mistakes(ref_texts[i], transcripts[0], scores[i][0])
@@ -391,22 +419,23 @@ Hypothesis(es):
             all_refs.append(ref)
             all_hyps.append(hyp)
 
-            wer_str = "%WER {} [ {} errors / {} words, {} ins, {} del, {} sub ]".format(round(report["total"] / report["words"]*100, 2),
-                                                                           report["total"], report["words"], len(report['ins']), len(report['del']), len(report['sub']))
-            print(wer_str)
+            if report["total"] > 0:
+                wer_str = "%WER {} [ {} errors / {} words, {} ins, {} del, {} sub ]".format(round(report["total"] / report["words"]*100, 2),
+                                                                            report["total"], report["words"], len(report['ins']), len(report['del']), len(report['sub']))
+                print(wer_str)
 
-            hyp_strs = [safe_join(trans) for trans in transcripts]
-            token_str = ""
-            score_str = ""
-            for j, token in enumerate(transcripts[0]):
-                token_str += token.ljust(7) + "|"
-                score_str += str(round(scores[i][0][j].item(), 2)).ljust(7) + "|"
-            print(PATTERN.format(ref=ref_texts[i], hyp=json.dumps(hyp_strs).replace('", ', '\n').
-                                 replace("[", "").replace("]", "").replace('"', "")))
+                hyp_strs = [safe_join(trans) for trans in transcripts]
+                token_str = ""
+                score_str = ""
+                for j, token in enumerate(transcripts[0]):
+                    token_str += token.ljust(7) + "|"
+                    score_str += str(round(scores[i][0][j].item(), 2)).ljust(7) + "|"
+                print(PATTERN.format(ref=ref_texts[i], hyp=json.dumps(hyp_strs).replace('", ', '\n').
+                                    replace("[", "").replace("]", "").replace('"', "")))
 
     summarize_reports(all_reports, all_refs, all_hyps)
 
 
 if __name__ == "__main__":
 
-    main(50, 1, 2)
+    main(50, 1, 1)
