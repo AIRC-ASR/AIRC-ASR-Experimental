@@ -1,40 +1,8 @@
 import os
-import collections
-import numpy as np
 import json
 from transformers import BertTokenizer, BertForMaskedLM
 from transformers import LineByLineTextDataset, DataCollatorForLanguageModeling
 from transformers import Trainer, TrainingArguments
-from transformers import default_data_collator
-
-wwm_probability = 0.2
-def whole_word_masking_data_collator(features):
-    for feature in features:
-        word_ids = feature.pop("word_ids")
-
-        # Create a map between words and corresponding token indices
-        mapping = collections.defaultdict(list)
-        current_word_index = -1
-        current_word = None
-        for idx, word_id in enumerate(word_ids):
-            if word_id is not None:
-                if word_id != current_word:
-                    current_word = word_id
-                    current_word_index += 1
-                mapping[current_word_index].append(idx)
-
-        # Randomly mask words
-        mask = np.random.binomial(1, wwm_probability, (len(mapping),))
-        input_ids = feature["input_ids"]
-        labels = feature["labels"]
-        new_labels = [-100] * len(labels)
-        for word_id in np.where(mask)[0]:
-            word_id = word_id.item()
-            for idx in mapping[word_id]:
-                new_labels[idx] = labels[idx]
-                input_ids[idx] = tokenizer.mask_token_id
-
-    return default_data_collator(features)
 
 with open('training_examples.json', encoding='utf-8') as json_file:
   training_examples = json.load(json_file)
@@ -77,7 +45,6 @@ dataset = LineByLineTextDataset(
     file_path=train_data_file,
     block_size=128  # Adjust the block size as per your requirement
 )
-print(dataset[0])
 
 # Define the data collator
 data_collator = DataCollatorForLanguageModeling(
@@ -94,14 +61,13 @@ training_args = TrainingArguments(
     per_device_train_batch_size=8,  # Adjust the batch size as per your GPU memory
     save_steps=500,
     save_total_limit=2,
-    remove_unused_columns=False,
 )
 
 # Create the Trainer
 trainer = Trainer(
     model=model,
     args=training_args,
-    data_collator=whole_word_masking_data_collator,
+    data_collator=data_collator,
     train_dataset=dataset,
 )
 
