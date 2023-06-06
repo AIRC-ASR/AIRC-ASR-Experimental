@@ -1,2 +1,4 @@
 model_checkpoints/
 pretrained_models/
+bert_mlm_output/
+fine-tuned_bert_model/

@@ -16,6 +16,7 @@ import tensorflow_datasets as tfds
 
 import tensorflow_io
 import Levenshtein
+from transformers import BertForMaskedLM, BertTokenizer
 
 
 def safe_join(fragments: list[str], joiner=""):
@@ -108,7 +109,10 @@ class CustomEncoder(EncoderASR):
         list
             List of possible substitutions
         """
-        unmasker = pipeline('fill-mask', model='bert-large-uncased')
+        model = BertForMaskedLM.from_pretrained('./fine-tuned_bert_model')
+        tokenizer = BertTokenizer.from_pretrained('./fine-tuned_bert_model')
+
+        unmasker = pipeline('fill-mask', model=model, tokenizer=tokenizer)
         unmasker_output = unmasker(sentence)
         substitutions = [output['token_str'].upper() for output in unmasker_output]
         filtered_substitutions = list(filter(lambda token: self.can_encode_token(token), substitutions))
