@@ -1,49 +1,24 @@
 BERT input sentence: cut as many nice even slices as may be required rather more than one quarter inch in thickness and toast them before a very bright fire without allowing the bread to blacken which spoils the appearance and [MASK] of all toast
-filtered_unmasker [
-  {'score': 0.5830948948860168, 'token': 5510, 'token_str': 'taste',
-  'sequence': 'cut as many nice even slices as may be required rather
-  more than one quarter inch in thickness and toast them before a
-  very bright fire without allowing the bread to blacken which
-  spoils the appearance and taste of all toast'},
-  {'score': 0.07107005268335342, 'token': 14894, 'token_str': 'flavor',
-  'sequence': 'cut as many nice even slices as may be required rather more than one quarter inch in thickness and
-  toast them before a very bright fire without allowing the bread to blacen which spoils the appearance and flavor of all toast'},
-  {'score': 0.061763517558574677, 'token': 28126, 'token_str': 'flavour',
-  'sequence': 'cut as many nice even slices as may be required rather more than one
-  quarter inch in thickness and toast them before a very bright fire without allowing
-  the bread to blacken which spoils the appearance and flavour of all toast'},
-  {'score': 0.048580050468444824, 'token': 3737, 'token_str': 'quality', 
-  sequence': 'cut as many nice even slices as may be required rather more than one quarter
-  inch in thickness and toast them before a very bright fire without allowing the bread
-  to blacken which spoils the appearance and quality of all toast'},
-  {'score': 0.027042172849178314, 'token': 14902, 'token_str': 'texture',
-  'sequence': 'cut as many nice even slices as may be required rather more than
-  one quarter inch in thickness and toast them before a very bright fire without
-  allowing the bread to blacken which spoils the appearance and texture of all toast'}]
-Substitute Word: TASTE
-Substituted FLAVOR for TASTE
-%WER 2.44 [ 1 errors / 41 words, 0 ins, 0 del, 1 sub ]
+Substituted FLAVOR for FLAVOR 
+%WER 7.32 [ 3 errors / 41 words, 1 ins, 0 del, 2 sub ]
 
 Reference:
 CUT AS MANY NICE EVEN SLICES AS MAY BE REQUIRED RATHER MORE THAN ONE QUARTER INCH IN THICKNESS AND TOAST THEM BEFORE A VERY BRIGHT FIRE WITHOUT ALLOWING THE BREAD TO BLACKEN WHICH SPOILS THE APPEARANCE AND FLAVOUR OF ALL TOAST
 Hypothesis(es):
-CUT AS MANY NICE EVEN SLICES AS MAY BE REQUIRED RATHER MORE THAN ONE QUARTER INCH IN THICKNESS AND TOAST THEM BEFORE A VERY BRIGHT FIRE WITHOUT ALLOWING THE BREAD TO BLACKEN WHICH SPOILS THE APPEARANCE AND TASTER OF ALL TOAST
+CUT AS MANY NICE EVEN SLICES AS MAY BE REQUIRED RATHER MORE THAN ONE QUARTER INCH IN THICKNESS AND TOAST THEM BEFORE A VERY BRIGHT FIRE WITHOUT ALLOWING THE BREAD TO BLACKEN WHICH SPOILS THE APPEARANCE AND FLAVOR  OF ALL TOAST
 ======================
 
 BERT input sentence: but the rashness of these concessions has encouraged a milder sentiment of those of the [MASK] who taught not that christ was a phantom but that he was clothed with an impassible and incorruptible body
-filtered_unmasker [{'score': 0.3643055856227875, 'token': 2277, 'token_str': 'church', 'sequence': 'but the rashness of these concessions has encouraged a milder sentiment of those of the church who taught not that christ was a phantom but that he was clothed with an impassible and incorruptible body'}, {'score': 0.04188796877861023, 'token': 2627, 'token_str': 'past', 'sequence': 'but the rashness of these concessions has encouraged a milder sentiment of those of the past who taught not that christ was a phantom but that he was clothed with an impassible and incorruptible body'}, {'score': 0.03162720426917076, 'token': 2154, 'token_str': 'day', 'sequence': 'but the rashness of these concessions has encouraged a milder sentiment of those of the day who taught not that christ was a phantom but that he was clothed with an impassible and incorruptible body'}, {'score': 0.023319657891988754, 'token': 4752, 'token_str': 'faith', 'sequence': 'but the rashness of these concessions has encouraged a milder sentiment of those of the faith who taught not that christ was a phantom but that he was clothed with an impassible and incorruptible body'}, {'score': 0.017447179183363914, 'token': 2082, 'token_str': 'school', 'sequence': 'but the rashness of these concessions has encouraged a milder sentiment of those of the school who taught not that christ was a phantom but that he was clothed with an impassible and incorruptible body'}]
-Substitute Word: CHURCH
-Substituted DOCITS for CHURCH
-%WER 2.86 [ 1 errors / 35 words, 0 ins, 0 del, 1 sub ]
+Substituted DOCITS for FAITH 
+%WER 8.57 [ 3 errors / 35 words, 1 ins, 0 del, 2 sub ]
 
 Reference:
 BUT THE RASHNESS OF THESE CONCESSIONS HAS ENCOURAGED A MILDER SENTIMENT OF THOSE OF THE DOCETES WHO TAUGHT NOT THAT CHRIST WAS A PHANTOM BUT THAT HE WAS CLOTHED WITH AN IMPASSIBLE AND INCORRUPTIBLE BODY
 Hypothesis(es):
-BUT THE RASHNESS OF THESE CONCESSIONS HAS ENCOURAGED A MILDER SENTIMENT OF THOSE OF THE CHURCH WHO TAUGHT NOT THAT CHRIST WAS A PHANTOM BUT THAT HE WAS CLOTHED WITH AN IMPASSIBLE AND INCORRUPTIBLE BODY
+BUT THE RASHNESS OF THESE CONCESSIONS HAS ENCOURAGED A MILDER SENTIMENT OF THOSE OF THE FAITH S WHO TAUGHT NOT THAT CHRIST WAS A PHANTOM BUT THAT HE WAS CLOTHED WITH AN IMPASSIBLE AND INCORRUPTIBLE BODY
 ======================
 
 BERT input sentence: i frequently thought it would be pleasant to split the difference with that mule and i would gladly have done so if i could have gotten one half of his [MASK]
-Substitute Word: None
 %WER 3.23 [ 1 errors / 31 words, 0 ins, 0 del, 1 sub ]
 
 Reference:
@@ -53,67 +28,48 @@ I FREQUENTLY THOUGHT IT WOULD BE PLEASANT TO SPLIT THE DIFFERENCE WITH THAT MULE
 ======================
 
 BERT input sentence: [MASK] wise mother magpie dear mother magpie they cried teach us how to build our nests like yours for it is growing night and we are tired and sleepy
-filtered_unmasker [{'score': 0.1131671816110611, 'token': 1051, 'token_str': 'o', 'sequence': 'o wise mother magpie dear mother magpie they cried teach us how to build our nests like yours for it is growing night and we are tired and sleepy'}, {'score': 0.08318300545215607, 'token': 1996, 'token_str': 'the', 'sequence': 'the wise mother magpie dear mother magpie they cried teach us how to build our nests like yours for it is growing night and we are tired and sleepy'}, {'score': 0.07981372624635696, 'token': 2821, 'token_str': 'oh', 'sequence': 'oh wise mother magpie dear mother magpie they cried teach us how to build our nests like yours for it is growing night and we are tired and sleepy'}, {'score': 0.07583221793174744, 'token': 2214, 'token_str': 'old', 'sequence': 'old wise mother magpie dear mother magpie they cried teach us how to build our nests like yours for it is growing night and we are tired and sleepy'}, {'score': 0.0585530661046505, 'token': 2026, 'token_str': 'my', 'sequence': 'my wise mother magpie dear mother magpie they cried teach us how to build our nests like yours for it is growing night and we are tired and sleepy'}]
-Substitute Word: O
-Substituted OH for O
-%WER 3.45 [ 1 errors / 29 words, 0 ins, 0 del, 1 sub ]
+Substituted OH for OH 
+%WER 10.34 [ 3 errors / 29 words, 1 ins, 0 del, 2 sub ]
 
 Reference:
 O WISE MOTHER MAGPIE DEAR MOTHER MAGPIE THEY CRIED TEACH US HOW TO BUILD OUR NESTS LIKE YOURS FOR IT IS GROWING NIGHT AND WE ARE TIRED AND SLEEPY
 Hypothesis(es):
-OH WISE MOTHER MAGPIE DEAR MOTHER MAGPIE THEY CRIED TEACH US HOW TO BUILD OUR NESTS LIKE YOURS FOR IT IS GROWING NIGHT AND WE ARE TIRED AND SLEEPY
+OH  WISE MOTHER MAGPIE DEAR MOTHER MAGPIE THEY CRIED TEACH US HOW TO BUILD OUR NESTS LIKE YOURS FOR IT IS GROWING NIGHT AND WE ARE TIRED AND SLEEPY
 ======================
 
 BERT input sentence: and therewithal such a bewilderment [MASK] me that i shut mine eyes for peace and in my brain did cease order of thought and every healthful thing
-filtered_unmasker [{'score': 0.31623438000679016, 'token': 3561, 'token_str': 'filled', 'sequence': 'and therewithal such a bewilderment filled me that i shut mine eyes for peace and in my brain did cease order of thought and every healthful thing'}, {'score': 0.11373520642518997, 'token': 4930, 'token_str': 'struck', 'sequence': 'and therewithal such a bewilderment struck me that i shut mine eyes for peace and in my brain did cease order of thought and every healthful thing'}, {'score': 0.10625720769166946, 'token': 8243, 'token_str': 'seized', 'sequence': 'and therewithal such a bewilderment seized me that i shut mine eyes for peace and in my brain did cease order of thought and every healthful thing'}, {'score': 0.08550335466861725, 'token': 9672, 'token_str': 'gripped', 'sequence': 'and therewithal such a bewilderment gripped me that i shut mine eyes for peace and in my brain did cease order of thought and every healthful thing'}, {'score': 0.04056815803050995, 'token': 8679, 'token_str': 'possessed', 'sequence': 'and therewithal such a bewilderment possessed me that i shut mine eyes for peace and in my brain did cease order of thought and every healthful thing'}]
-Substitute Word: FILLED
-Substituted POSSESSED for FILLED
-%WER 3.7 [ 1 errors / 27 words, 0 ins, 0 del, 1 sub ]
+Substituted POSSESSED for POSSESSED 
+%WER 11.11 [ 3 errors / 27 words, 1 ins, 0 del, 2 sub ]
 
 Reference:
 AND THEREWITHAL SUCH A BEWILDERMENT POSSESS'D ME THAT I SHUT MINE EYES FOR PEACE AND IN MY BRAIN DID CEASE ORDER OF THOUGHT AND EVERY HEALTHFUL THING
 Hypothesis(es):
-AND THEREWITHAL SUCH A BEWILDERMENT FILLEDSED ME THAT I SHUT MINE EYES FOR PEACE AND IN MY BRAIN DID CEASE ORDER OF THOUGHT AND EVERY HEALTHFUL THING
+AND THEREWITHAL SUCH A BEWILDERMENT POSSESSED  ME THAT I SHUT MINE EYES FOR PEACE AND IN MY BRAIN DID CEASE ORDER OF THOUGHT AND EVERY HEALTHFUL THING
 ======================
 
 BERT input sentence: a harsh laugh from [MASK] ossipan cut the tirade dead short in a sudden faltering of the tongue and the bewildered unsteadiness of the apostle's mildly exalted eyes
-filtered_unmasker [{'score': 0.4210647940635681, 'token': 1996, 'token_str': 'the', 'sequence': "a harsh laugh from the ossipan cut the tirade dead short in a sudden faltering of the tongue and the bewildered unsteadiness of the apostle's mildly exalted eyes"}, {'score': 0.07877347618341446, 'token': 6422, 'token_str': 'elder', 'sequence': "a harsh laugh from elder ossipan cut the tirade dead short in a sudden faltering of the tongue and the bewildered unsteadiness of the apostle's mildly exalted eyes"}, {'score': 0.03974313288927078, 'token': 3387, 'token_str': 'bishop', 'sequence': "a harsh laugh from bishop ossipan cut the tirade dead short in a sudden faltering of the tongue and the bewildered unsteadiness of the apostle's mildly exalted eyes"}, {'score': 0.03579187020659447, 'token': 12626, 'token_str': 'patriarch', 'sequence': "a harsh laugh from patriarch ossipan cut the tirade dead short in a sudden faltering of the tongue and the bewildered unsteadiness of the apostle's mildly exalted eyes"}, {'score': 0.029139269143342972, 'token': 7185, 'token_str': 'cardinal', 'sequence': "a harsh laugh from cardinal ossipan cut the tirade dead short in a sudden faltering of the tongue and the bewildered unsteadiness of the apostle's mildly exalted eyes"}]
-Substitute Word: THE
-Substituted CONRAD for THE
-%WER 10.71 [ 3 errors / 28 words, 0 ins, 0 del, 3 sub ]
+Substituted CONRAD for BISHOP 
+%WER 17.86 [ 5 errors / 28 words, 1 ins, 0 del, 4 sub ]
 
 Reference:
 A HARSH LAUGH FROM COMRADE OSSIPON CUT THE TIRADE DEAD SHORT IN A SUDDEN FALTERING OF THE TONGUE AND A BEWILDERED UNSTEADINESS OF THE APOSTLE'S MILDLY EXALTED EYES
 Hypothesis(es):
-A HARSH LAUGH FROM THERAD OSSIPAN CUT THE TIRADE DEAD SHORT IN A SUDDEN FALTERING OF THE TONGUE AND THE BEWILDERED UNSTEADINESS OF THE APOSTLE'S MILDLY EXALTED EYES
+A HARSH LAUGH FROM BISHOP  OSSIPAN CUT THE TIRADE DEAD SHORT IN A SUDDEN FALTERING OF THE TONGUE AND THE BEWILDERED UNSTEADINESS OF THE APOSTLE'S MILDLY EXALTED EYES
 ======================
 
 BERT input sentence: i believe said john that in the sight of god i have a right to [MASK] that promise
-filtered_unmasker [{'score': 0.6506925821304321, 'token': 2562, 'token_str': 'keep', 'sequence': 'i believe said john that in the sight of god i have a right to keep that promise'}, {'score': 0.17939788103103638, 'token': 2191, 'token_str': 'make', 'sequence': 'i believe said john that in the sight of god i have a right to make that promise'}, {'score': 0.049552690237760544, 'token': 3338, 'token_str': 'break', 'sequence': 'i believe said john that in the sight of god i have a right to break that promise'}, {'score': 0.045549795031547546, 'token': 13883, 'token_str': 'fulfill', 'sequence': 'i believe said john that in the sight of god i have a right to fulfill that promise'}, {'score': 0.008932171389460564, 'token': 20687, 'token_str': 'renew', 'sequence': 'i believe said john that in the sight of god i have a right to renew that promise'}]
-Substitute Word: KEEP
-Substituted FULFIL for KEEP
-%WER 5.56 [ 1 errors / 18 words, 0 ins, 0 del, 1 sub ]
-
-Reference:
-I BELIEVE SAID JOHN THAT IN THE SIGHT OF GOD I HAVE A RIGHT TO FULFILL THAT PROMISE
-Hypothesis(es):
-I BELIEVE SAID JOHN THAT IN THE SIGHT OF GOD I HAVE A RIGHT TO KEEPIL THAT PROMISE
-======================
-
+Substituted FULFIL for FULFILL 
 BERT input sentence: tracing the mc cloud to its highest springs and over the divide to the fountains of fall river near fort crook thence down that river to its confluence with the [MASK] on from there to the volcanic region about lasson's butte through the big meadows among the sources of the feather river and down through forests of sugar pine to the fertile plains of chico this is a glorious saunter and imposes no hardship
-filtered_unmasker [{'score': 0.27396565675735474, 'token': 11932, 'token_str': 'sacramento', 'sequence': "tracing the mc cloud to its highest springs and over the divide to the fountains of fall river near fort crook thence down that river to its confluence with the sacramento on from there to the volcanic region about lasson's butte through the big meadows among the sources of the feather river and down through forests of sugar pine to the fertile plains of chico this is a glorious saunter and imposes no hardship"}, {'score': 0.09868474304676056, 'token': 15550, 'token_str': 'feather', 'sequence': "tracing the mc cloud to its highest springs and over the divide to the fountains of fall river near fort crook thence down that river to its confluence with the feather on from there to the volcanic region about lasson's butte through the big meadows among the sources of the feather river and down through forests of sugar pine to the fertile plains of chico this is a glorious saunter and imposes no hardship"}, {'score': 0.055733807384967804, 'token': 5169, 'token_str': 'colorado', 'sequence': "tracing the mc cloud to its highest springs and over the divide to the fountains of fall river near fort crook thence down that river to its confluence with the colorado on from there to the volcanic region about lasson's butte through the big meadows among the sources of the feather river and down through forests of sugar pine to the fertile plains of chico this is a glorious saunter and imposes no hardship"}, {'score': 0.023610930889844894, 'token': 7488, 'token_str': 'snake', 'sequence': "tracing the mc cloud to its highest springs and over the divide to the fountains of fall river near fort crook thence down that river to its confluence with the snake on from there to the volcanic region about lasson's butte through the big meadows among the sources of the feather river and down through forests of sugar pine to the fertile plains of chico this is a glorious saunter and imposes no hardship"}, {'score': 0.023068031296133995, 'token': 3996, 'token_str': 'columbia', 'sequence': "tracing the mc cloud to its highest springs and over the divide to the fountains of fall river near fort crook thence down that river to its confluence with the columbia on from there to the volcanic region about lasson's butte through the big meadows among the sources of the feather river and down through forests of sugar pine to the fertile plains of chico this is a glorious saunter and imposes no hardship"}]
-Substitute Word: SACRAMENTO
-Substituted PIT for SACRAMENTO
-%WER 59.46 [ 44 errors / 74 words, 1 ins, 0 del, 43 sub ]
+Substituted PIT for SNAKE 
+%WER 4.05 [ 3 errors / 74 words, 0 ins, 0 del, 3 sub ]
 
 Reference:
 TRACING THE MC CLOUD TO ITS HIGHEST SPRINGS AND OVER THE DIVIDE TO THE FOUNTAINS OF FALL RIVER NEAR FORT CROOK THENCE DOWN THAT RIVER TO ITS CONFLUENCE WITH THE PITT ON FROM THERE TO THE VOLCANIC REGION ABOUT LASSEN'S BUTTE THROUGH THE BIG MEADOWS AMONG THE SOURCES OF THE FEATHER RIVER AND DOWN THROUGH FORESTS OF SUGAR PINE TO THE FERTILE PLAINS OF CHICO THIS IS A GLORIOUS SAUNTER AND IMPOSES NO HARDSHIP
 Hypothesis(es):
-TRACING THE MC CLOUD TO ITS HIGHEST SPRINGS AND OVER THE DIVIDE TO THE FOUNTAINS OF FALL RIVER NEAR FORT CROOK THENCE DOWN THAT RIVER TO ITS CONFLUENCE WITH THE SACRAMENTOM THERE TO THE VOLCANIC REGION ABOUT LASSON'S BUTTE THROUGH THE BIG MEADOWS AMONG THE SOURCES OF THE FEATHER RIVER AND DOWN THROUGH FORESTS OF SUGAR PINE TO THE FERTILE PLAINS OF CHICO THIS IS A GLORIOUS SAUNTER AND IMPOSES NO HARDSHIP
+TRACING THE MC CLOUD TO ITS HIGHEST SPRINGS AND OVER THE DIVIDE TO THE FOUNTAINS OF FALL RIVER NEAR FORT CROOK THENCE DOWN THAT RIVER TO ITS CONFLUENCE WITH THE SNAKE N FROM THERE TO THE VOLCANIC REGION ABOUT LASSON'S BUTTE THROUGH THE BIG MEADOWS AMONG THE SOURCES OF THE FEATHER RIVER AND DOWN THROUGH FORESTS OF SUGAR PINE TO THE FERTILE PLAINS OF CHICO THIS IS A GLORIOUS SAUNTER AND IMPOSES NO HARDSHIP
 ======================
 
 BERT input sentence: the leaden hailstorm swept them off the field they fell back and [MASK]
-Substitute Word: None
 %WER 26.67 [ 4 errors / 15 words, 0 ins, 1 del, 3 sub ]
 
 Reference:
@@ -122,4 +78,4 @@ Hypothesis(es):
 THE LEADEN HAILSTORM SWEPT THEM OFF THE FIELD THEY FELL BACK AND REFORMED
 ======================
 
-Total %WER 5.99 [ 57 errors / 951 words, 1 ins, 1 del, 55 sub ]
+Total %WER 2.63 [ 25 errors / 951 words, 5 ins, 1 del, 19 sub ]

@@ -113,18 +113,18 @@ class CustomEncoder(EncoderASR):
         substitutions = [output['token_str'].upper() for output in unmasker_output]
         filtered_substitutions = list(filter(lambda token: self.can_encode_token(token), substitutions))
         # print('filtered_substitutions', filtered_substitutions)
-        filtered_unmasker = []
-        for output in unmasker_output:
-            if output['token_str'].upper() in filtered_substitutions:
-                filtered_unmasker.append(output)
-        if len(filtered_unmasker) == 0:
-            return None
-        print('filtered_unmasker', filtered_unmasker)
-        best_word = max(filtered_unmasker, key=lambda output: output['score'])['token_str'].upper()
-        return best_word
+        # filtered_unmasker = []
+        # for output in unmasker_output:
+        #     if output['token_str'].upper() in filtered_substitutions:
+        #         filtered_unmasker.append(output)
+        # if len(filtered_unmasker) == 0:
+        #     return None
+        # print('filtered_unmasker', filtered_unmasker)
+        # best_word = max(filtered_unmasker, key=lambda output: output['score'])['token_str'].upper()
+        return filtered_substitutions
 
 
-    def select_best_substitution(self, substitutions, hypothesis, levenshtein_weight = 0.6, phonetic_weight = 0.4):
+    def select_best_substitution(self, substitutions, hypothesis, levenshtein_weight = 0.5, phonetic_weight = 0.5):
         """
         Selects the best substitution for a given hypothesis from a list of possible substitutions.
 
@@ -140,7 +140,7 @@ class CustomEncoder(EncoderASR):
         str
             The best substitution
         """
-        rertur
+        
         if not substitutions or len(substitutions) == 0:
             return None
         levenshtein_distances = [Levenshtein.distance(hypothesis, word) for word in substitutions]
@@ -266,10 +266,13 @@ class CustomEncoder(EncoderASR):
                     if hypothesis_word in low_confidence_words and hypothesis_string in low_confidence_indices:
                         bert_input_sentence = hypothesis_string.lower().replace(hypothesis_word.lower(), "[MASK]", 1)
                         print("BERT input sentence:", bert_input_sentence)
-                        substitute_word = self.generate_substitutions(bert_input_sentence)
-                        print("Substitute Word:", substitute_word)
-                        # substitute_word = self.select_best_substitution(substitutions, hypothesis_word)
+                        substitutions = self.generate_substitutions(bert_input_sentence)
+                        # print("Substitute Word:", substitute_word)
+                        substitute_word = self.select_best_substitution(substitutions, hypothesis_word)
+                        # if k != len(hypothesis_words) - 1:
+                            # substitute_word = substitute_word + " "
                         if substitute_word is not None:
+                            substitute_word += " "
                             substitute_word_length = len(substitute_word)
                             start_index = hypothesis_string.index(hypothesis_word)
                             predicted_words[0][i] = predicted_words[0][i][:start_index] + [char for char in substitute_word] + predicted_words[0][i][start_index + substitute_word_length:]
