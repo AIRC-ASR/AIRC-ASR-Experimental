@@ -5,17 +5,32 @@ import sentencepiece
 import speechbrain
 from speechbrain.pretrained import EncoderASR
 from SoundsLike.SoundsLike import Search
-
 import torch
+import matplotlib.pyplot as plt
 from itertools import *
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
 import tensorflow_io
 import Levenshtein
 
 
 def safe_join(fragments: list[str], joiner=""):
+    """
+    Concatenates a list of strings into on string, safely ignoring None types
+
+    Parameters
+    ----------
+    fragments: list[str]
+        The substrings to join
+    joiner: str
+        The string used to join the substrings
+
+    Returns
+    -------
+    str
+        The joined string
+    """
+
     if fragments is None:
         return fragments
     fragments = list(filter(lambda frag: frag is not None, fragments))
@@ -23,9 +38,27 @@ def safe_join(fragments: list[str], joiner=""):
 
 
 class CustomEncoder(EncoderASR):
+    """Custom class to add behavior to the ASR encoder"""
 
     @staticmethod
     def filter_output(preds: torch.Tensor, scores: torch.Tensor, blank_id=-1):
+        """
+        Filters out duplicate tokens and blank tokens from the predictions
+
+        Parameters
+        ----------
+        preds: torch.Tensor
+            The predicted tokens
+        scores: torch.Tensor
+            The confidence scores of each of the tokens
+        blank_id: int
+            The id of the blank tokens to filter out
+
+        Returns
+        -------
+        tuple[list, list]
+            The filtered predictions and their corresponding scores
+        """
 
         # Filter the repetitions
         preds_out = []
@@ -43,6 +76,26 @@ class CustomEncoder(EncoderASR):
 
     @classmethod
     def merge(cls, scores: list[torch.Tensor], predictions: list[torch.Tensor], blank_id=-1, threshold: float = 3):
+        """
+        Takes in several, greedy predictions and merges the more likely predictions into the less likely ones, creating predictions of reasonable variation
+
+        Parameters
+        ----------
+        scores: list[torch.Tensor]
+            The confidence scores of each of the predictions
+        predictions: list[torch.Tensor]
+            The predictions
+        blank_id: int
+            The id of the blank tokens to filter out
+        threshold: float
+            The confidence difference threshold for replacing more likely tokens with less likely ones
+
+        Returns
+        -------
+        tuple:
+            The merged predicions and their scores
+        """
+
         merged_preds = [torch.clone(predictions[0])]
         merged_scores = [torch.clone(scores[0])]
         for i in range(len(predictions)-1):
@@ -61,14 +114,34 @@ class CustomEncoder(EncoderASR):
         return merged_preds, merged_scores
 
     @classmethod
-    def decode_probs(cls, probabilities, seq_lens, blank_id=-1, top_k=1):
+    def decode_probs(cls, encoded: torch.Tensor, seq_lens: torch.Tensor, blank_id=-1, top_k=1):
+        """
+        Decodes the output of the encoder along with the confidence probabilities
+
+        Parameters
+        ----------
+        encoded: torch.Tensor
+            The encoded sound data
+        seq_lens: torch.Tensor
+            The ratio of the lengths of the sequences relative to the longest sequence
+        blank_id: int
+            The id of the blank tokens to filter out
+        top_k: int
+            How many prediction sequences to gather
+
+        Returns
+        -------
+        tuple
+            The predicted token ids along with the confidence probabilities
+        """
 
         if isinstance(blank_id, int) and blank_id < 0:
-            blank_id = probabilities.shape[-1] + blank_id
-        batch_max_len = probabilities.shape[1]
+            blank_id = encoded.shape[-1] + blank_id
+        batch_max_len = encoded.shape[1]
         batch_preds = []
         batch_scores = []
-        for seq, seq_len in zip(probabilities, seq_lens):
+        for seq, seq_len in zip(encoded, seq_lens):
+            # Restore the size of the current sequence
             actual_size = int(torch.round(seq_len * batch_max_len))
             zipped_scores, zipped_predictions = torch.topk(seq.narrow(0, 0, actual_size), k=top_k, dim=1)
             scores, predictions = list(torch.split(zipped_scores, 1, dim=1)), list(torch.split(zipped_predictions, 1, dim=1))
@@ -77,9 +150,11 @@ class CustomEncoder(EncoderASR):
                 predictions[i] = torch.squeeze(predictions[i])
                 scores[i] = torch.squeeze(scores[i])
 
+            # Combine top predictions into sensible varieties
             preds, scores = cls.merge(scores, predictions, blank_id=blank_id, threshold=3)
             batch_preds.append(preds)
             batch_scores.append(scores)
+
         return batch_preds, batch_scores
 
     def generate_substitutions(self, word):
@@ -115,7 +190,6 @@ class CustomEncoder(EncoderASR):
             return substitutions
         except ValueError:
             return []
-
 
     def select_best_substitution(self, substitutions, hypothesis):
         """
@@ -184,7 +258,8 @@ class CustomEncoder(EncoderASR):
         return all_hypothesis_words, all_word_scores
 
     def transcribe_batch(self, wavs, wav_lens, top_k=1, substitution_threshold=0.5):
-        """Transcribes the input audio into a sequence of words
+        """
+        Transcribes the input audio into a sequence of words
 
         The waveforms should already be in the model's desired format.
         You can call:
@@ -209,6 +284,7 @@ class CustomEncoder(EncoderASR):
         tensor
             Each predicted token id.
         """
+
         with torch.no_grad():
             wav_lens = wav_lens.to(self.device)
             encoder_out = self.encode_batch(wavs, wav_lens)
@@ -256,10 +332,29 @@ class CustomEncoder(EncoderASR):
 # wavs, wav_lens, ref_text = zip(*[(x["speech"].numpy(), x["speech"].shape[0], x['text'].numpy().decode()) for idx, x in enumerate(ds[subset]) if idx<max_samples])
 
 def parse_mistakes(ref_text: str, hyp_tokens: list[str], scores: list[torch.Tensor]):
+    """
+    Groups the reference and hypothesis by word and calculates which mistakes the hypothesis has made
+
+    Parameters
+    ----------
+    ref_text: str
+        The correct transcription
+    hyp_tokens: list[str]
+        The predicted transcription
+    scores: list[torch.Tensor]
+        The scores of the hypothesis
+
+    Returns
+    -------
+    tuple
+        A report of the errors and the reorganized reference and hypothesis
+    """
+
     ref = ref_text.split()
     split_hyps = [[]]
     split_scores = [[]]
 
+    # Group hypothesis and scores by words instead of by token
     for i, token in enumerate(hyp_tokens):
         if token == " ":
             split_scores.append([])
@@ -274,6 +369,7 @@ def parse_mistakes(ref_text: str, hyp_tokens: list[str], scores: list[torch.Tens
     ref = ref + [[None]] * (max_len - len(ref))
     hyp = split_hyps + [[None]] * (max_len - len(split_hyps))
 
+    # Tally which mistakes are made by the hypothesis, using the reference
     hyp_offset = 0
     for i in range(max_len):
         if i+1+hyp_offset >= len(hyp):
@@ -291,10 +387,25 @@ def parse_mistakes(ref_text: str, hyp_tokens: list[str], scores: list[torch.Tens
         else:
             report["sub"].append(i)
 
+    if report["total"]:
+        visualize_confidence(hyp_tokens, scores)
+
     return report, ref, hyp
 
 
-def summarize_reports(reports: list[dict], refs: list[str], hyp: list[list[list[str]]]):
+def summarize_reports(reports: list[dict], refs: list[list[str]], hyp: list[list[list[str]]]):
+    """
+    Summarizes the results of all of the reports
+
+    Parameters
+    ----------
+    reports: list[dict]
+        All of the reports from the samples
+    refs: list[list[str]]
+        The correct transcriptions of the samples
+    hyp: list[list[list[str]]]
+        The guessed transcriptions of the samples
+    """
     summary = {"ins": 0, "del": 0, "sub": 0, "total": 0, "words": 0}
 
     # print("Mistakes:\nReference -> Hypothesis")
@@ -305,7 +416,9 @@ def summarize_reports(reports: list[dict], refs: list[str], hyp: list[list[list[
         summary["total"] += reports[i]["total"]
         summary["words"] += reports[i]["words"]
 
-        def score_map():
+        """def score_map():
+            \"""Arranges each token with its corresponding score\"""
+
             merged_str = ""
             for j in range(len(hyp[i][idx: idx + 2])):
                 for k in range(len(hyp[i][idx: idx + 2][j])):
@@ -316,22 +429,24 @@ def summarize_reports(reports: list[dict], refs: list[str], hyp: list[list[list[
             # print(merged_str, "\n")
 
         def join_words(words: list[list[str]]):
+            \"""Safely joins a list of lists\"""
+
             joined = []
             for word in words:
                 joined.append(safe_join(word))
             return safe_join(joined, " ")
 
         for idx in reports[i]["ins"]:
-            # print(f"Insertion: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
+            print(f"Insertion: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
             score_map()
 
         for idx in reports[i]["del"]:
-            # print(f"Deletion: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
+            print(f"Deletion: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
             score_map()
 
         for idx in reports[i]["sub"]:
-            # print(f"Substitution: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
-            score_map()
+            print(f"Substitution: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
+            score_map()"""
 
     print("Total %WER {} [ {} errors / {} words, {} ins, {} del, {} sub ]".format(round(summary["total"] / summary["words"]*100, 2),
                                                                      summary["total"], summary["words"], summary['ins'], summary['del'], summary['sub']))
@@ -340,6 +455,34 @@ def summarize_reports(reports: list[dict], refs: list[str], hyp: list[list[list[
     #     print("Out of {} errors: {}% ins, {}% del, {}% sub".format(summary["total"], round(summary["ins"] / summary["total"]*100, 2),
     #                                                                round(summary["del"] / summary["total"]*100, 2),
     #                                                                round(summary["sub"] / summary["total"]*100, 2)))
+
+
+def visualize_confidence(transcript: list[str], token_scores: list[torch.Tensor]):
+    """
+    Visualizes the confidence scores for each token in a pyplot
+
+    Parameters
+    ----------
+    transcript: list[str]
+        The transcription of the sample
+    token_scores: list[torch.Tensor]
+        The confidence scores of the predictions
+    """
+
+    token_str = ""
+    score_str = ""
+    for j, token in enumerate(transcript):
+        token_str += token.ljust(7) + "|"
+        score_str += str(round(token_scores[j].item(), 2)).ljust(7) + "|"
+
+    token_scores = [score.item() for score in token_scores]
+
+    plt.figure(figsize=(20, 4), dpi=80)
+    plt.plot(range(len(token_scores)), token_scores)
+    plt.xticks(range(len(token_scores)), transcript)
+    plt.show()
+
+    pass
 
 
 def main(max_samples=500, batch_size=1, top_k=1):
@@ -359,13 +502,14 @@ Hypothesis(es):
     ds = tfds.load('librispeech', builder_kwargs={'config': 'lazy_decode'})
     ds_iter = iter(ds[subset])
 
-    all_reports = []
-    all_refs = []
-    all_hyps = []
+    all_reports, all_refs, all_hyps = [], [], []
 
     for i in range(0, max_samples, batch_size):
         wavs, wav_lens, ref_texts = [], [], []
+
         # print(f"\nLoading batch {i // batch_size}...\n")
+
+        # Process raw data into batches
         for _ in range(batch_size):
             sample = next(ds_iter)
             wav, wav_len, ref_text = sample["speech"].numpy(), sample["speech"].shape[0], sample['text'].numpy().decode()
@@ -381,23 +525,17 @@ Hypothesis(es):
         transcriptions, tokens, scores = asr_model.transcribe_batch(torch.Tensor(wavs), torch.Tensor(wav_lens), top_k=top_k)
 
         for i, transcripts in enumerate(transcriptions):
+            hyp_strs = [safe_join(trans) for trans in transcripts]
+            print(PATTERN.format(ref=ref_texts[i], hyp=json.dumps(hyp_strs).replace('", ', '\n').
+                                 replace("[", "").replace("]", "").replace('"', "")))
+
             report, ref, hyp = parse_mistakes(ref_texts[i], transcripts[0], scores[i][0])
             all_reports.append(report)
             all_refs.append(ref)
             all_hyps.append(hyp)
 
-            wer_str = "%WER {} [ {} errors / {} words, {} ins, {} del, {} sub ]".format(round(report["total"] / report["words"]*100, 2),
-                                                                           report["total"], report["words"], len(report['ins']), len(report['del']), len(report['sub']))
-            print(wer_str)
-
-            hyp_strs = [safe_join(trans) for trans in transcripts]
-            token_str = ""
-            score_str = ""
-            for j, token in enumerate(transcripts[0]):
-                token_str += token.ljust(7) + "|"
-                score_str += str(round(scores[i][0][j].item(), 2)).ljust(7) + "|"
-            print(PATTERN.format(ref=ref_texts[i], hyp=json.dumps(hyp_strs).replace('", ', '\n').
-                                 replace("[", "").replace("]", "").replace('"', "")))
+            print("%WER {} [ {} errors / {} words, {} ins, {} del, {} sub ]".format(round(report["total"] / report["words"]*100, 2),
+                                                                           report["total"], report["words"], len(report['ins']), len(report['del']), len(report['sub'])))
 
     summarize_reports(all_reports, all_refs, all_hyps)
 
