@@ -7,6 +7,7 @@ from speechbrain.pretrained import EncoderASR
 from SoundsLike.SoundsLike import Search
 import torch
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from itertools import *
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -388,7 +389,7 @@ def parse_mistakes(ref_text: str, hyp_tokens: list[str], scores: list[torch.Tens
             report["sub"].append(i)
 
     if report["total"]:
-        visualize_confidence(hyp_tokens, scores)
+        visualize_confidence(hyp_tokens, list(ref_text), scores, report)
 
     return report, ref, hyp
 
@@ -457,35 +458,64 @@ def summarize_reports(reports: list[dict], refs: list[list[str]], hyp: list[list
     #                                                                round(summary["sub"] / summary["total"]*100, 2)))
 
 
-def visualize_confidence(transcript: list[str], token_scores: list[torch.Tensor]):
+def visualize_confidence(hyp_tokens: list[str], ref_tokens: list[str], token_scores: list[torch.Tensor], error_report: dict, max_score=16):
     """
     Visualizes the confidence scores for each token in a pyplot
 
     Parameters
     ----------
-    transcript: list[str]
-        The transcription of the sample
+    hyp_tokens: list[str]
+        The hypothesized transcription of the sample
+    ref_tokens: list[str]
+        The reference transcription of the sample
     token_scores: list[torch.Tensor]
         The confidence scores of the predictions
+    error_report: dict
+        A report of all the errors in transcription
+    max_score: int
+        The maximum score a token can have
     """
 
     token_str = ""
     score_str = ""
-    for j, token in enumerate(transcript):
+    for j, token in enumerate(hyp_tokens):
         token_str += token.ljust(7) + "|"
         score_str += str(round(token_scores[j].item(), 2)).ljust(7) + "|"
 
-    token_scores = [score.item() for score in token_scores]
+    token_scores = [min(round(score.item()/max_score, 2), max_score) for score in token_scores]
 
-    plt.figure(figsize=(20, 4), dpi=80)
-    plt.plot(range(len(token_scores)), token_scores)
-    plt.xticks(range(len(token_scores)), transcript)
-    plt.show()
+    max_len = max(len(ref_tokens), len(hyp_tokens))
+    fig, ax1 = plt.subplots(figsize=(len(hyp_tokens) * 0.15, 6), dpi=80)
+    ax2 = ax1.twiny()
+    ax1.twinx()
+
+    legend = []
+
+    for err_type in [("ins", "yellow"), ("del", "orange"), ("sub", "red")]:
+        legend.append(mpatches.Patch(color=err_type[1], label=err_type[0]))
+        for error in error_report[err_type[0]]:
+            place = 1
+            for work_scores in error_report["scores"][:error]:
+                place += len(work_scores)+1
+            if error >= len(error_report["scores"]):
+                error = len(error_report)-1
+            ax1.axvspan(place, place+len(error_report["scores"][error]), alpha=.5, color=err_type[1])
+
+    ax1.set_xlabel('Predicted Tokens')
+    ax1.set_ylabel('Prediction Confidence')
+    ax2.set_xlabel('Original Tokens')
+
+    ax1.plot(range(len(token_scores)), token_scores)
+    ax1.set_xticks(range(max_len), hyp_tokens + [""] * (max_len - len(hyp_tokens)))
+    ax2.set_xticks(range(max_len), ref_tokens + [""] * (max_len - len(ref_tokens)))
+    ax1.legend(handles=legend)
+    ax1.set_title("Confidence Scores of Generated Tokens")
+    fig.show()
 
     pass
 
 
-def main(max_samples=500, batch_size=1, top_k=1):
+def main(max_samples=500, batch_size=1, top_k=1, start_idx=0):
     PATTERN = """
 Reference:
 {ref}
@@ -501,6 +531,9 @@ Hypothesis(es):
 
     ds = tfds.load('librispeech', builder_kwargs={'config': 'lazy_decode'})
     ds_iter = iter(ds[subset])
+
+    for i in range(start_idx):
+        next(ds_iter)
 
     all_reports, all_refs, all_hyps = [], [], []
 
@@ -542,4 +575,4 @@ Hypothesis(es):
 
 if __name__ == "__main__":
 
-    main(50, 1, 2)
+    main(50, 1, 2, start_idx=400)
