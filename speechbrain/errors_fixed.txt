@@ -1,24 +1,27 @@
 BERT input sentence: cut as many nice even slices as may be required rather more than one quarter inch in thickness and toast them before a very bright fire without allowing the bread to blacken which spoils the appearance and [MASK] of all toast
-Substituted FLAVOR for FLAVOR 
-%WER 7.32 [ 3 errors / 41 words, 1 ins, 0 del, 2 sub ]
+Substitutions: ['TASTE', 'FLAVOUR', 'QUALITY', 'TEXTURE']
+Substituted FLAVOR for FLAVOUR 
+%WER 2.44 [ 1 errors / 41 words, 0 ins, 0 del, 1 sub ]
 
 Reference:
 CUT AS MANY NICE EVEN SLICES AS MAY BE REQUIRED RATHER MORE THAN ONE QUARTER INCH IN THICKNESS AND TOAST THEM BEFORE A VERY BRIGHT FIRE WITHOUT ALLOWING THE BREAD TO BLACKEN WHICH SPOILS THE APPEARANCE AND FLAVOUR OF ALL TOAST
 Hypothesis(es):
-CUT AS MANY NICE EVEN SLICES AS MAY BE REQUIRED RATHER MORE THAN ONE QUARTER INCH IN THICKNESS AND TOAST THEM BEFORE A VERY BRIGHT FIRE WITHOUT ALLOWING THE BREAD TO BLACKEN WHICH SPOILS THE APPEARANCE AND FLAVOR  OF ALL TOAST
+CUT AS MANY NICE EVEN SLICES AS MAY BE REQUIRED RATHER MORE THAN ONE QUARTER INCH IN THICKNESS AND TOAST THEM BEFORE A VERY BRIGHT FIRE WITHOUT ALLOWING THE BREAD TO BLACKEN WHICH SPOILS THE APPEARANCE AND FLAVOUR F ALL TOAST
 ======================
 
 BERT input sentence: but the rashness of these concessions has encouraged a milder sentiment of those of the [MASK] who taught not that christ was a phantom but that he was clothed with an impassible and incorruptible body
+Substitutions: ['CHURCH', 'PAST', 'DAY', 'FAITH', 'SCHOOL']
 Substituted DOCITS for FAITH 
 %WER 8.57 [ 3 errors / 35 words, 1 ins, 0 del, 2 sub ]
 
 Reference:
 BUT THE RASHNESS OF THESE CONCESSIONS HAS ENCOURAGED A MILDER SENTIMENT OF THOSE OF THE DOCETES WHO TAUGHT NOT THAT CHRIST WAS A PHANTOM BUT THAT HE WAS CLOTHED WITH AN IMPASSIBLE AND INCORRUPTIBLE BODY
 Hypothesis(es):
-BUT THE RASHNESS OF THESE CONCESSIONS HAS ENCOURAGED A MILDER SENTIMENT OF THOSE OF THE FAITH S WHO TAUGHT NOT THAT CHRIST WAS A PHANTOM BUT THAT HE WAS CLOTHED WITH AN IMPASSIBLE AND INCORRUPTIBLE BODY
+BUT THE RASHNESS OF THESE CONCESSIONS HAS ENCOURAGED A MILDER SENTIMENT OF THOSE OF THE FAITH  WHO TAUGHT NOT THAT CHRIST WAS A PHANTOM BUT THAT HE WAS CLOTHED WITH AN IMPASSIBLE AND INCORRUPTIBLE BODY
 ======================
 
 BERT input sentence: i frequently thought it would be pleasant to split the difference with that mule and i would gladly have done so if i could have gotten one half of his [MASK]
+Substitutions: []
 %WER 3.23 [ 1 errors / 31 words, 0 ins, 0 del, 1 sub ]
 
 Reference:
@@ -28,48 +31,62 @@ I FREQUENTLY THOUGHT IT WOULD BE PLEASANT TO SPLIT THE DIFFERENCE WITH THAT MULE
 ======================
 
 BERT input sentence: [MASK] wise mother magpie dear mother magpie they cried teach us how to build our nests like yours for it is growing night and we are tired and sleepy
-Substituted OH for OH 
-%WER 10.34 [ 3 errors / 29 words, 1 ins, 0 del, 2 sub ]
+Substitutions: ['O', 'THE', 'OLD', 'MY']
+Substituted OH for O 
+%WER 6.9 [ 2 errors / 29 words, 1 ins, 0 del, 1 sub ]
 
 Reference:
 O WISE MOTHER MAGPIE DEAR MOTHER MAGPIE THEY CRIED TEACH US HOW TO BUILD OUR NESTS LIKE YOURS FOR IT IS GROWING NIGHT AND WE ARE TIRED AND SLEEPY
 Hypothesis(es):
-OH  WISE MOTHER MAGPIE DEAR MOTHER MAGPIE THEY CRIED TEACH US HOW TO BUILD OUR NESTS LIKE YOURS FOR IT IS GROWING NIGHT AND WE ARE TIRED AND SLEEPY
+O  WISE MOTHER MAGPIE DEAR MOTHER MAGPIE THEY CRIED TEACH US HOW TO BUILD OUR NESTS LIKE YOURS FOR IT IS GROWING NIGHT AND WE ARE TIRED AND SLEEPY
 ======================
 
 BERT input sentence: and therewithal such a bewilderment [MASK] me that i shut mine eyes for peace and in my brain did cease order of thought and every healthful thing
-Substituted POSSESSED for POSSESSED 
+Substitutions: ['FILLED', 'STRUCK', 'SEIZED', 'GRIPPED']
+Substituted POSSESSED for SEIZED 
 %WER 11.11 [ 3 errors / 27 words, 1 ins, 0 del, 2 sub ]
 
 Reference:
 AND THEREWITHAL SUCH A BEWILDERMENT POSSESS'D ME THAT I SHUT MINE EYES FOR PEACE AND IN MY BRAIN DID CEASE ORDER OF THOUGHT AND EVERY HEALTHFUL THING
 Hypothesis(es):
-AND THEREWITHAL SUCH A BEWILDERMENT POSSESSED  ME THAT I SHUT MINE EYES FOR PEACE AND IN MY BRAIN DID CEASE ORDER OF THOUGHT AND EVERY HEALTHFUL THING
+AND THEREWITHAL SUCH A BEWILDERMENT SEIZED ED ME THAT I SHUT MINE EYES FOR PEACE AND IN MY BRAIN DID CEASE ORDER OF THOUGHT AND EVERY HEALTHFUL THING
 ======================
 
 BERT input sentence: a harsh laugh from [MASK] ossipan cut the tirade dead short in a sudden faltering of the tongue and the bewildered unsteadiness of the apostle's mildly exalted eyes
+Substitutions: ['THE', 'ELDER', 'BISHOP', 'PATRIARCH', 'CARDINAL']
 Substituted CONRAD for BISHOP 
-%WER 17.86 [ 5 errors / 28 words, 1 ins, 0 del, 4 sub ]
+%WER 10.71 [ 3 errors / 28 words, 0 ins, 0 del, 3 sub ]
 
 Reference:
 A HARSH LAUGH FROM COMRADE OSSIPON CUT THE TIRADE DEAD SHORT IN A SUDDEN FALTERING OF THE TONGUE AND A BEWILDERED UNSTEADINESS OF THE APOSTLE'S MILDLY EXALTED EYES
 Hypothesis(es):
-A HARSH LAUGH FROM BISHOP  OSSIPAN CUT THE TIRADE DEAD SHORT IN A SUDDEN FALTERING OF THE TONGUE AND THE BEWILDERED UNSTEADINESS OF THE APOSTLE'S MILDLY EXALTED EYES
+A HARSH LAUGH FROM BISHOP OSSIPAN CUT THE TIRADE DEAD SHORT IN A SUDDEN FALTERING OF THE TONGUE AND THE BEWILDERED UNSTEADINESS OF THE APOSTLE'S MILDLY EXALTED EYES
 ======================
 
 BERT input sentence: i believe said john that in the sight of god i have a right to [MASK] that promise
+Substitutions: ['KEEP', 'MAKE', 'BREAK', 'FULFILL', 'RENEW']
 Substituted FULFIL for FULFILL 
+%WER 5.56 [ 1 errors / 18 words, 0 ins, 0 del, 1 sub ]
+
+Reference:
+I BELIEVE SAID JOHN THAT IN THE SIGHT OF GOD I HAVE A RIGHT TO FULFILL THAT PROMISE
+Hypothesis(es):
+I BELIEVE SAID JOHN THAT IN THE SIGHT OF GOD I HAVE A RIGHT TO FULFILL HAT PROMISE
+======================
+
 BERT input sentence: tracing the mc cloud to its highest springs and over the divide to the fountains of fall river near fort crook thence down that river to its confluence with the [MASK] on from there to the volcanic region about lasson's butte through the big meadows among the sources of the feather river and down through forests of sugar pine to the fertile plains of chico this is a glorious saunter and imposes no hardship
+Substitutions: ['SACRAMENTO', 'FEATHER', 'COLORADO', 'SNAKE', 'COLUMBIA']
 Substituted PIT for SNAKE 
 %WER 4.05 [ 3 errors / 74 words, 0 ins, 0 del, 3 sub ]
 
 Reference:
 TRACING THE MC CLOUD TO ITS HIGHEST SPRINGS AND OVER THE DIVIDE TO THE FOUNTAINS OF FALL RIVER NEAR FORT CROOK THENCE DOWN THAT RIVER TO ITS CONFLUENCE WITH THE PITT ON FROM THERE TO THE VOLCANIC REGION ABOUT LASSEN'S BUTTE THROUGH THE BIG MEADOWS AMONG THE SOURCES OF THE FEATHER RIVER AND DOWN THROUGH FORESTS OF SUGAR PINE TO THE FERTILE PLAINS OF CHICO THIS IS A GLORIOUS SAUNTER AND IMPOSES NO HARDSHIP
 Hypothesis(es):
-TRACING THE MC CLOUD TO ITS HIGHEST SPRINGS AND OVER THE DIVIDE TO THE FOUNTAINS OF FALL RIVER NEAR FORT CROOK THENCE DOWN THAT RIVER TO ITS CONFLUENCE WITH THE SNAKE N FROM THERE TO THE VOLCANIC REGION ABOUT LASSON'S BUTTE THROUGH THE BIG MEADOWS AMONG THE SOURCES OF THE FEATHER RIVER AND DOWN THROUGH FORESTS OF SUGAR PINE TO THE FERTILE PLAINS OF CHICO THIS IS A GLORIOUS SAUNTER AND IMPOSES NO HARDSHIP
+TRACING THE MC CLOUD TO ITS HIGHEST SPRINGS AND OVER THE DIVIDE TO THE FOUNTAINS OF FALL RIVER NEAR FORT CROOK THENCE DOWN THAT RIVER TO ITS CONFLUENCE WITH THE SNAKE  FROM THERE TO THE VOLCANIC REGION ABOUT LASSON'S BUTTE THROUGH THE BIG MEADOWS AMONG THE SOURCES OF THE FEATHER RIVER AND DOWN THROUGH FORESTS OF SUGAR PINE TO THE FERTILE PLAINS OF CHICO THIS IS A GLORIOUS SAUNTER AND IMPOSES NO HARDSHIP
 ======================
 
 BERT input sentence: the leaden hailstorm swept them off the field they fell back and [MASK]
+Substitutions: []
 %WER 26.67 [ 4 errors / 15 words, 0 ins, 1 del, 3 sub ]
 
 Reference:
@@ -78,4 +95,4 @@ Hypothesis(es):
 THE LEADEN HAILSTORM SWEPT THEM OFF THE FIELD THEY FELL BACK AND REFORMED
 ======================
 
-Total %WER 2.63 [ 25 errors / 951 words, 5 ins, 1 del, 19 sub ]
+Total %WER 2.21 [ 21 errors / 951 words, 3 ins, 1 del, 17 sub ]

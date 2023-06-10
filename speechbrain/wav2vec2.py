@@ -109,10 +109,11 @@ class CustomEncoder(EncoderASR):
         list
             List of possible substitutions
         """
-        model = BertForMaskedLM.from_pretrained('./fine-tuned_bert_model')
-        tokenizer = BertTokenizer.from_pretrained('./fine-tuned_bert_model')
+        # model = BertForMaskedLM.from_pretrained('./fine-tuned_bert_model')
+        # tokenizer = BertTokenizer.from_pretrained('./fine-tuned_bert_model')
 
-        unmasker = pipeline('fill-mask', model=model, tokenizer=tokenizer)
+        # unmasker = pipeline('fill-mask', model=model, tokenizer=tokenizer)
+        unmasker = pipeline('fill-mask', model='bert-large-uncased')
         unmasker_output = unmasker(sentence)
         substitutions = [output['token_str'].upper() for output in unmasker_output]
         filtered_substitutions = list(filter(lambda token: self.can_encode_token(token), substitutions))
@@ -128,7 +129,7 @@ class CustomEncoder(EncoderASR):
         return filtered_substitutions
 
 
-    def select_best_substitution(self, substitutions, hypothesis, levenshtein_weight = 0.5, phonetic_weight = 0.5):
+    def select_best_substitution(self, substitutions, hypothesis, levenshtein_weight = 1.0, phonetic_weight = 0):
         """
         Selects the best substitution for a given hypothesis from a list of possible substitutions.
 
@@ -271,6 +272,9 @@ class CustomEncoder(EncoderASR):
                         bert_input_sentence = hypothesis_string.lower().replace(hypothesis_word.lower(), "[MASK]", 1)
                         print("BERT input sentence:", bert_input_sentence)
                         substitutions = self.generate_substitutions(bert_input_sentence)
+                        if hypothesis_word in substitutions:
+                            substitutions.remove(hypothesis_word)
+                        print('Substitutions:', substitutions)
                         # print("Substitute Word:", substitute_word)
                         substitute_word = self.select_best_substitution(substitutions, hypothesis_word)
                         # if k != len(hypothesis_words) - 1:
