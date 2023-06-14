@@ -159,63 +159,92 @@ class CustomEncoder(EncoderASR):
 
         return batch_preds, batch_scores
 
-    def _helper(self, predicted_words, predictions, scores, i, j, current_prob, confidence_threshold, current_token, outputs):
-        print(f'i: {i}, j: {j}, len(predictions) - 1: {len(predictions) - 1}, len(predictions[i]) - 1: {len(predictions[i]) - 1}')
-        if i == len(predictions) - 1 and j == len(predictions[i]) - 1:
-            # Other Base Case: DONE, do not branch in this case -- there is no next hypothesis sentence
-            print("DONE!!!")
-            outputs.append((predicted_words, predictions, scores, True))
-            return predicted_words, predictions, scores
-        elif current_prob >= confidence_threshold:
-            # Base Case: Do not branch in this case -- the current token is already confident enough
-            return self._helper(predicted_words, predictions, scores, i, j + 1, torch.sigmoid(scores[i][j + 1]).item(), confidence_threshold, predicted_words[i][j + 1], outputs)
+    def _helper(self, predicted_words, predictions, scores, i, j, current_prob, confidence_threshold, current_token):
+        leaves = []
 
-            # return predicted_words, predictions, scores
-        elif i + 1 >= len(predicted_words) or j >= len(predictions[i + 1]):
-            # Base Case: Do not branch in this case -- there is no second best token in this case
-            return predicted_words, predictions, scores
-        elif j >= len(predictions[i]) and i + 1 < len(predicted_words):
-            # Other Recursive Case: Do not branch in this case -- go to the next hypothesis sentence
-            print(f"Going to next hypothesis sentence")
-            return self._helper(predicted_words, predictions, scores, i + 1, 0, torch.sigmoid(scores[i + 1][0]).item(), confidence_threshold, predicted_words[i + 1][0], outputs)            
-        else:
-            # Main Recursive Case: Branch in this case -- replace the current token with the second best token
-            second_best_token = predicted_words[i + 1][j]
-            second_best_prediction = predictions[i + 1][j].item()
-            second_best_score = scores[i + 1][j].item()
-
-            predicted_words_branch = copy.deepcopy(predicted_words)
-            predictions_branch = copy.deepcopy(predictions)
-            scores_branch = copy.deepcopy(scores)
-
-            try:
-                predicted_words_branch[i][j] = second_best_token
-                predictions_branch[i][j] = second_best_prediction
-                scores_branch[i][j] = second_best_score
-            except IndexError:
-                print(f"IndexError: {i}, {j}, {len(predicted_words)}, {len(predictions)}, {len(scores)}, {len(predicted_words[i][0])}")
-                return predicted_words, predictions, scores
-
-
-            # If there is another letter in the current hypothesis sentence, go to the next letter
+        if current_prob >= confidence_threshold:
             if j + 1 < len(predictions[i]):
-                self._helper(predicted_words, predictions, scores, i, j + 1, torch.sigmoid(scores[i][j + 1]).item(), confidence_threshold, predicted_words[i][j + 1], outputs)
-                self._helper(predicted_words_branch, predictions_branch, scores_branch, i, j + 1, torch.sigmoid(scores[i][j + 1]).item(), confidence_threshold, predicted_words[i][j + 1], outputs)
+                leaves.extend(self._helper(predicted_words, predictions, scores, i, j + 1, torch.sigmoid(scores[i][j + 1]).item(), confidence_threshold, predicted_words[i][j + 1]))
+            elif i + 1 < len(predicted_words):
+                leaves.extend(self._helper(predicted_words, predictions, scores, i + 1, 0, torch.sigmoid(scores[i + 1][0]).item(), confidence_threshold, predicted_words[i + 1][0]))
             else:
-                # Otherwise, go to the next hypothesis sentence
-                self._helper(predicted_words, predictions, scores, i + 1, 0, torch.sigmoid(scores[i][0]).item(), confidence_threshold, predicted_words[i + 1][0], outputs)
-                self._helper(predicted_words_branch, predictions_branch, scores_branch, i + 1, 0, torch.sigmoid(scores[i][0]).item(), confidence_threshold, predicted_words[i + 1][0], outputs)
+                leaves.append((predicted_words, predictions, scores))
+        else:
+            leaves.append((predicted_words, predictions, scores))  # Append the current state as a leaf
+
+            if i + 1 < len(predicted_words):
+                second_best_token = predicted_words[i + 1][j] if j < len(predicted_words[i + 1]) else None
+                second_best_prediction = predictions[i + 1][j].item() if j < len(predictions[i + 1]) else None
+                second_best_score = scores[i + 1][j].item() if j < len(scores[i + 1]) else None
+
+                if second_best_token is None:
+                    if j + 1 < len(predictions[i]):
+                        leaves.extend(self._helper(predicted_words, predictions, scores, i, j + 1, torch.sigmoid(scores[i][j + 1]).item(), confidence_threshold, predicted_words[i][j + 1]))
+                    elif i + 1 < len(predicted_words):
+                        leaves.extend(self._helper(predicted_words, predictions, scores, i + 1, 0, torch.sigmoid(scores[i + 1][0]).item(), confidence_threshold, predicted_words[i + 1][0]))
+                    else:
+                        leaves.append((predicted_words, predictions, scores))
+                else:
+                    predicted_words_branch = copy.deepcopy(predicted_words)
+                    predictions_branch = copy.deepcopy(predictions)
+                    scores_branch = copy.deepcopy(scores)
+
+                    try:
+                        predicted_words_branch[i][j] = second_best_token
+                        predictions_branch[i][j] = second_best_prediction
+                        scores_branch[i][j] = second_best_score
+                    except IndexError:
+                        print(f"IndexError: {i}, {j}, {len(predicted_words)}, {len(predictions)}, {len(scores)}, {len(predicted_words[i][0])}")
+
+                    if j + 1 < len(predictions[i]) and j + 1 < len(predictions_branch[i]):
+                        leaves.extend(self._helper(predicted_words, predictions, scores, i, j + 1, torch.sigmoid(scores[i][j + 1]).item(), confidence_threshold, predicted_words[i][j + 1]))
+                        leaves.extend(self._helper(predicted_words_branch, predictions_branch, scores_branch, i, j + 1, torch.sigmoid(scores_branch[i][j + 1]).item(), confidence_threshold, predicted_words_branch[i][j + 1]))
+                    elif i + 1 < len(predicted_words) and i + 1 < len(predicted_words_branch):
+                        leaves.extend(self._helper(predicted_words, predictions, scores, i + 1, 0, torch.sigmoid(scores[i + 1][0]).item(), confidence_threshold, predicted_words[i + 1][0]))
+                        leaves.extend(self._helper(predicted_words_branch, predictions_branch, scores_branch, i + 1, 0, torch.sigmoid(scores_branch[i + 1][0]).item(), confidence_threshold, predicted_words_branch[i + 1][0]))
+                    else:
+                        leaves.append((predicted_words, predictions, scores))
+
+        return leaves
+
+
 
     def beam_search_decoding(self, predicted_words, predictions, scores, confidence_threshold):
-        outputs = []
         i = 0
         j = 0
         current_prob = torch.sigmoid(scores[i][j]).item()
         current_token = predicted_words[i][j]
-        self._helper(predicted_words, predictions, scores, i, j, current_prob, confidence_threshold, current_token, outputs)
+        leaves = self._helper(predicted_words, predictions, scores, i, j, current_prob, confidence_threshold, current_token)
         
-        print("OUTPUTS", len(outputs))
-        print("OUTPUTS", outputs)
+        sentence_options = []
+        for idx, (predicted_words_, predictions_, scores_) in enumerate(leaves):
+            sentence_ = "".join(predicted_words_[0])
+            sentence_score = sum(scores_[0])
+            sentence_options.append((idx, sentence_, sentence_score))
+
+        print("BEAM SEARCH DECODING OUTPUTS")
+        print("NUMBER OF OPTIONS: ", len(sentence_options))
+        print("")
+
+        for idx, sentence_, sentence_score in sentence_options:
+            print(f"IDX: {idx}")
+            print(f"SENTENCE: {sentence_}")
+            print(f"SCORE: {sentence_score}")
+            print("")
+
+        best_option = max(sentence_options, key=lambda x: x[2])
+        print("BEST OPTION")
+        print(f"IDX: {best_option[0]}")
+        print(f"SENTENCE: {best_option[1]}")
+        print(f"SCORE: {best_option[2]}")
+        print("")
+
+        best_idx = best_option[0]
+
+        predicted_words = leaves[best_idx][0]
+        predictions = leaves[best_idx][1]
+        scores = leaves[best_idx][2]
+
         return predicted_words, predictions, scores
 
     def tokenize_predictions(self, predictions):
@@ -246,7 +275,7 @@ class CustomEncoder(EncoderASR):
 
         return [probs]
 
-    def transcribe_batch(self, wavs, wav_lens, top_k=2, confidence_threshold=0.1):
+    def transcribe_batch(self, wavs, wav_lens, top_k=2, confidence_threshold=0.991):
         """
         Transcribes the input audio into a sequence of words with branching on low confidence tokens.
 
