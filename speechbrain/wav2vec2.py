@@ -160,27 +160,30 @@ class CustomEncoder(EncoderASR):
         return batch_preds, batch_scores
 
     def _helper(self, predicted_words, predictions, scores, i, j, current_prob, confidence_threshold, current_token, outputs):
+        print(f'i: {i}, j: {j}, len(predictions) - 1: {len(predictions) - 1}, len(predictions[i]) - 1: {len(predictions[i]) - 1}')
         if i == len(predictions) - 1 and j == len(predictions[i]) - 1:
             # Other Base Case: DONE, do not branch in this case -- there is no next hypothesis sentence
             print("DONE!!!")
-            outputs.append((predicted_words, predictions, scores))
+            outputs.append((predicted_words, predictions, scores, True))
             return predicted_words, predictions, scores
         elif current_prob >= confidence_threshold:
             # Base Case: Do not branch in this case -- the current token is already confident enough
-            return predicted_words, predictions, scores
+            return self._helper(predicted_words, predictions, scores, i, j + 1, torch.sigmoid(scores[i][j + 1]).item(), confidence_threshold, predicted_words[i][j + 1], outputs)
+
+            # return predicted_words, predictions, scores
         elif i + 1 >= len(predicted_words) or j >= len(predictions[i + 1]):
             # Base Case: Do not branch in this case -- there is no second best token in this case
             return predicted_words, predictions, scores
-        elif j >= len(predictions[i]):
+        elif j >= len(predictions[i]) and i + 1 < len(predicted_words):
             # Other Recursive Case: Do not branch in this case -- go to the next hypothesis sentence
             print(f"Going to next hypothesis sentence")
-            return self._helper(predicted_words, predictions, scores, i + 1, 0, current_prob, confidence_threshold, current_token, outputs)            
+            return self._helper(predicted_words, predictions, scores, i + 1, 0, torch.sigmoid(scores[i + 1][0]).item(), confidence_threshold, predicted_words[i + 1][0], outputs)            
         else:
             # Main Recursive Case: Branch in this case -- replace the current token with the second best token
             second_best_token = predicted_words[i + 1][j]
             second_best_prediction = predictions[i + 1][j].item()
             second_best_score = scores[i + 1][j].item()
-            
+
             predicted_words_branch = copy.deepcopy(predicted_words)
             predictions_branch = copy.deepcopy(predictions)
             scores_branch = copy.deepcopy(scores)
@@ -189,26 +192,30 @@ class CustomEncoder(EncoderASR):
                 predicted_words_branch[i][j] = second_best_token
                 predictions_branch[i][j] = second_best_prediction
                 scores_branch[i][j] = second_best_score
-
-                # print(f"Replacing {current_token} with {second_best_token}")
             except IndexError:
                 print(f"IndexError: {i}, {j}, {len(predicted_words)}, {len(predictions)}, {len(scores)}, {len(predicted_words[i][0])}")
                 return predicted_words, predictions, scores
 
-            second_branch_output = self._helper(predicted_words_branch, predictions_branch, scores_branch, i, j + 1, current_prob, confidence_threshold, current_token, outputs)
-            if i == len(predictions) - 1 and j == len(predictions[i]) - 1:
-                print("APP")
-                outputs.append(second_branch_output)
 
-    def beam_search_decoding(self, predicted_words, predictions, scores, confidence_threshold, probs):
+            # If there is another letter in the current hypothesis sentence, go to the next letter
+            if j + 1 < len(predictions[i]):
+                self._helper(predicted_words, predictions, scores, i, j + 1, torch.sigmoid(scores[i][j + 1]).item(), confidence_threshold, predicted_words[i][j + 1], outputs)
+                self._helper(predicted_words_branch, predictions_branch, scores_branch, i, j + 1, torch.sigmoid(scores[i][j + 1]).item(), confidence_threshold, predicted_words[i][j + 1], outputs)
+            else:
+                # Otherwise, go to the next hypothesis sentence
+                self._helper(predicted_words, predictions, scores, i + 1, 0, torch.sigmoid(scores[i][0]).item(), confidence_threshold, predicted_words[i + 1][0], outputs)
+                self._helper(predicted_words_branch, predictions_branch, scores_branch, i + 1, 0, torch.sigmoid(scores[i][0]).item(), confidence_threshold, predicted_words[i + 1][0], outputs)
+
+    def beam_search_decoding(self, predicted_words, predictions, scores, confidence_threshold):
         outputs = []
-        for i, token_seq in enumerate(predicted_words):
-            for j, current_token in enumerate(token_seq):
-                current_prob = probs[i][j]
-                print('i: ', i, 'j: ', j, 'current_token: ', current_token, 'current_prob: ', current_prob)
-                self._helper(predicted_words, predictions, scores, i, j, current_prob, confidence_threshold, current_token, outputs)
+        i = 0
+        j = 0
+        current_prob = torch.sigmoid(scores[i][j]).item()
+        current_token = predicted_words[i][j]
+        self._helper(predicted_words, predictions, scores, i, j, current_prob, confidence_threshold, current_token, outputs)
         
         print("OUTPUTS", len(outputs))
+        print("OUTPUTS", outputs)
         return predicted_words, predictions, scores
 
     def tokenize_predictions(self, predictions):
@@ -233,12 +240,13 @@ class CustomEncoder(EncoderASR):
         probs = []
 
         for score_list in scores[0]:
-            probs_list = torch.nn.functional.softmax(torch.tensor(score_list), dim=0).tolist()
+            score_tensor = torch.tensor(score_list)
+            probs_list = torch.sigmoid(score_tensor).tolist()
             probs.append(probs_list)
 
         return [probs]
 
-    def transcribe_batch(self, wavs, wav_lens, top_k=2, confidence_threshold=0.5):
+    def transcribe_batch(self, wavs, wav_lens, top_k=2, confidence_threshold=0.1):
         """
         Transcribes the input audio into a sequence of words with branching on low confidence tokens.
 
@@ -274,15 +282,15 @@ class CustomEncoder(EncoderASR):
 
             # Convert the list of scores to a list of probabilities
             probs = self.scores_to_probs(scores)
+            print('PROBS', probs)
 
             # Converts the predicted token ids into a list of tokens for each sentence
             predicted_words = self.tokenize_predictions(predictions)
 
             # Uses beam search decoding to replace low confidence tokens with the next best prediction
             # Updates the predicted_words, predictions, and scores lists
-            predicted_words, predictions, scores = self.beam_search_decoding(predicted_words[0], predictions[0], scores[0], confidence_threshold, probs[0])
+            predicted_words, predictions, scores = self.beam_search_decoding(predicted_words[0], predictions[0], scores[0], confidence_threshold)
 
-        print("LEN", len(predicted_words), len(predictions), len(scores))
         return [predicted_words], [predictions], [scores]
 
 # wavs, wav_lens, ref_text = zip(*[(x["speech"].numpy(), x["speech"].shape[0], x['text'].numpy().decode()) for idx, x in enumerate(ds[subset]) if idx<max_samples])
