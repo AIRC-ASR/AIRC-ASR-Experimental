@@ -4,6 +4,7 @@ import sys
 import numpy
 import sentencepiece
 import speechbrain
+import tqdm
 from speechbrain.pretrained import EncoderASR
 from SoundsLike.SoundsLike import Search
 import torch
@@ -380,54 +381,58 @@ def parse_mistakes(ref_text: str, hyp_tokens: list[str], scores: list[torch.Tens
         else:
             report["sub"].append(i)
 
-    # if report["total"]:
-    #     visualize_confidence(hyp_tokens, list(ref_text), scores, report)
+    if report["total"]:
+         visualize_confidence(hyp_tokens, list(ref_text), scores, report)
 
     return report, ref, hyp
 
 
-def summarize_reports(reports: list[dict], refs: list[list[str]], hyp: list[list[list[str]]]):
+def summarize_reports(reports: list[dict], refs: list[list[str]], hyp: list[list[list[str]]], verbose=False):
     """
     Summarizes the results of all of the reports
 
     Parameters
     ----------
     reports: list[dict]
-        All of the reports from the samples
+        All the reports from the samples
     refs: list[list[str]]
         The correct transcriptions of the samples
     hyp: list[list[list[str]]]
         The guessed transcriptions of the samples
-    """
+    verbose: Whether to include verbose logging or not"""
+
     summary = {"ins": 0, "del": 0, "sub": 0, "total": 0, "words": 0}
 
-    # print("Mistakes:\nReference -> Hypothesis")
-    for i in range(len(reports)):
-        summary["ins"] += len(reports[i]["ins"])
-        summary["del"] += len(reports[i]["del"])
-        summary["sub"] += len(reports[i]["sub"])
-        summary["total"] += reports[i]["total"]
-        summary["words"] += reports[i]["words"]
+    def score_map():
+        """Arranges each token with its corresponding score"""
 
-        """def score_map():
-            \"""Arranges each token with its corresponding score\"""
-
-            merged_str = ""
+        merged_str = ""
+        try:
             for j in range(len(hyp[i][idx: idx + 2])):
                 for k in range(len(hyp[i][idx: idx + 2][j])):
                     if hyp[i][idx: idx + 2][j][k] is None:
                         continue
                     merged_str += f"{hyp[i][idx: idx + 2][j][k]}: {round(reports[i]['scores'][idx: idx + 2][j][k].item(), 2)}, "
                 merged_str += "| "
-            # print(merged_str, "\n")
+        finally:
+            print(merged_str, "\n")
 
-        def join_words(words: list[list[str]]):
-            \"""Safely joins a list of lists\"""
+    def join_words(words: list[list[str]]):
+        """Safely joins a list of lists"""
 
-            joined = []
-            for word in words:
-                joined.append(safe_join(word))
-            return safe_join(joined, " ")
+        joined = []
+        for word in words:
+            joined.append(safe_join(word))
+        return safe_join(joined, " ")
+
+    if verbose:
+        print("Mistakes:\nReference -> Hypothesis")
+    for i in range(len(reports) if verbose else 0):
+        summary["ins"] += len(reports[i]["ins"])
+        summary["del"] += len(reports[i]["del"])
+        summary["sub"] += len(reports[i]["sub"])
+        summary["total"] += reports[i]["total"]
+        summary["words"] += reports[i]["words"]
 
         for idx in reports[i]["ins"]:
             print(f"Insertion: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
@@ -439,15 +444,15 @@ def summarize_reports(reports: list[dict], refs: list[list[str]], hyp: list[list
 
         for idx in reports[i]["sub"]:
             print(f"Substitution: {safe_join(refs[i][idx : idx+2], ' ')} -> {join_words(hyp[i][idx : idx+2])}")
-            score_map()"""
+            score_map()
 
     print("Total %WER {} [ {} errors / {} words, {} ins, {} del, {} sub ]".format(round(summary["total"] / summary["words"]*100, 2),
                                                                      summary["total"], summary["words"], summary['ins'], summary['del'], summary['sub']))
 
-    # if summary["total"] > 0:
-    #     print("Out of {} errors: {}% ins, {}% del, {}% sub".format(summary["total"], round(summary["ins"] / summary["total"]*100, 2),
-    #                                                                round(summary["del"] / summary["total"]*100, 2),
-    #                                                                round(summary["sub"] / summary["total"]*100, 2)))
+    if verbose and summary["total"] > 0:
+        print("Out of {} errors: {}% ins, {}% del, {}% sub".format(summary["total"], round(summary["ins"] / summary["total"]*100, 2),
+                                                                   round(summary["del"] / summary["total"]*100, 2),
+                                                                   round(summary["sub"] / summary["total"]*100, 2)))
 
 
 def visualize_confidence(hyp_tokens: list[str], ref_tokens: list[str], token_scores: list[torch.Tensor], error_report: dict, max_score=16):
@@ -524,15 +529,14 @@ Hypothesis(es):
     ds = tfds.load('librispeech', builder_kwargs={'config': 'lazy_decode'})
     ds_iter = iter(ds[subset])
 
-    for i in range(start_idx):
+    print(f"Skipping {start_idx} samples...")
+    for _ in tqdm.tqdm(range(start_idx)):
         next(ds_iter)
 
     all_reports, all_refs, all_hyps = [], [], []
 
-    for i in range(0, max_samples, batch_size):
+    for _ in tqdm.tqdm(range(0, max_samples, batch_size)):
         wavs, wav_lens, ref_texts = [], [], []
-
-        # print(f"\nLoading batch {i // batch_size}...\n")
 
         # Process raw data into batches
         for _ in range(batch_size):
@@ -562,9 +566,9 @@ Hypothesis(es):
             print("%WER {} [ {} errors / {} words, {} ins, {} del, {} sub ]".format(round(report["total"] / report["words"]*100, 2),
                                                                            report["total"], report["words"], len(report['ins']), len(report['del']), len(report['sub'])))
 
-    summarize_reports(all_reports, all_refs, all_hyps)
+    summarize_reports(all_reports, all_refs, all_hyps, verbose=True)
 
 
 if __name__ == "__main__":
 
-    main(50, 2, 2, start_idx=400)
+    main(100, 1, 1, start_idx=1000)
