@@ -1,3 +1,4 @@
+import copy
 import json
 import sys
 import numpy
@@ -94,7 +95,7 @@ class CustomEncoder(EncoderASR):
         Returns
         -------
         tuple:
-            The merged predicions and their scores
+            The merged predictions and their scores
         """
 
         merged_preds = [torch.clone(predictions[0])]
@@ -158,114 +159,88 @@ class CustomEncoder(EncoderASR):
 
         return batch_preds, batch_scores
 
-    def generate_substitutions(self, word):
-        """
-        Generates a list of possible substitutions for a given word
-        using algorithms based on phonetic similarity.
-
-        Arguments
-        ---------
-        word : str
-            The word to be substituted
-
-        Returns
-        -------
-        list
-            List of possible substitutions
-        """
-        try:
-            substitutions = Search.closeHomophones(word)
-            substitutions = [word_.upper() for word_ in substitutions]
-            if word in substitutions:
-                substitutions.remove(word)
+    def _helper(self, predicted_words, predictions, scores, i, j, current_prob, confidence_threshold, current_token, outputs):
+        if i == len(predictions) - 1 and j == len(predictions[i]) - 1:
+            # Other Base Case: DONE, do not branch in this case -- there is no next hypothesis sentence
+            print("DONE!!!")
+            outputs.append((predicted_words, predictions, scores))
+            return predicted_words, predictions, scores
+        elif current_prob >= confidence_threshold:
+            # Base Case: Do not branch in this case -- the current token is already confident enough
+            return predicted_words, predictions, scores
+        elif i + 1 >= len(predicted_words) or j >= len(predictions[i + 1]):
+            # Base Case: Do not branch in this case -- there is no second best token in this case
+            return predicted_words, predictions, scores
+        elif j >= len(predictions[i]):
+            # Other Recursive Case: Do not branch in this case -- go to the next hypothesis sentence
+            print(f"Going to next hypothesis sentence")
+            return self._helper(predicted_words, predictions, scores, i + 1, 0, current_prob, confidence_threshold, current_token, outputs)            
+        else:
+            # Main Recursive Case: Branch in this case -- replace the current token with the second best token
+            second_best_token = predicted_words[i + 1][j]
+            second_best_prediction = predictions[i + 1][j].item()
+            second_best_score = scores[i + 1][j].item()
             
-            # Remove substitutions that cannot be encoded by the tokenizer
-            for i, substitute_word in enumerate(substitutions):
-                for char in substitute_word:
-                    try:
-                        self.tokenizer.encode_sequence(char)
-                    except KeyError:
-                        del substitutions[i]
-                        break
+            predicted_words_branch = copy.deepcopy(predicted_words)
+            predictions_branch = copy.deepcopy(predictions)
+            scores_branch = copy.deepcopy(scores)
 
-            return substitutions
-        except ValueError:
-            return []
+            try:
+                predicted_words_branch[i][j] = second_best_token
+                predictions_branch[i][j] = second_best_prediction
+                scores_branch[i][j] = second_best_score
 
-    def select_best_substitution(self, substitutions, hypothesis):
-        """
-        Selects the best substitution for a given hypothesis from a list of possible substitutions.
+                # print(f"Replacing {current_token} with {second_best_token}")
+            except IndexError:
+                print(f"IndexError: {i}, {j}, {len(predicted_words)}, {len(predictions)}, {len(scores)}, {len(predicted_words[i][0])}")
+                return predicted_words, predictions, scores
 
-        Arguments
-        ---------
-        substitutions : list
-            List of possible substitutions
-        hypothesis : str
-            The hypothesis to be substituted
+            second_branch_output = self._helper(predicted_words_branch, predictions_branch, scores_branch, i, j + 1, current_prob, confidence_threshold, current_token, outputs)
+            if i == len(predictions) - 1 and j == len(predictions[i]) - 1:
+                print("APP")
+                outputs.append(second_branch_output)
+
+    def beam_search_decoding(self, predicted_words, predictions, scores, confidence_threshold, probs):
+        outputs = []
+        for i, token_seq in enumerate(predicted_words):
+            for j, current_token in enumerate(token_seq):
+                current_prob = probs[i][j]
+                print('i: ', i, 'j: ', j, 'current_token: ', current_token, 'current_prob: ', current_prob)
+                self._helper(predicted_words, predictions, scores, i, j, current_prob, confidence_threshold, current_token, outputs)
         
-        Returns
-        -------
-        str
-            The best substitution
+        print("OUTPUTS", len(outputs))
+        return predicted_words, predictions, scores
+
+    def tokenize_predictions(self, predictions):
+        if isinstance(self.tokenizer, speechbrain.dataio.encoder.CTCTextEncoder):
+            hypotheses = [[self.tokenizer.decode_ndim(token_seq)
+                                for token_seq in predict_subset]
+                                for predict_subset in predictions]
+        elif isinstance(self.tokenizer, sentencepiece.SentencePieceProcessor):
+            hypotheses = [[
+                self.tokenizer.decode_ids(token_seq)
+                for token_seq in predict_subset
+            ] for predict_subset in predictions]
+        else:
+            sys.exit("The tokenizer must be sentencepiece or CTCTextEncoder")
+
+        return hypotheses
+
+    def scores_to_probs(self, scores):
         """
-        min_distance = float('inf')
-        best_substitution = None
-
-        for substitution in substitutions:
-            distance = Levenshtein.distance(substitution, hypothesis)
-            if distance < min_distance:
-                min_distance = distance
-                best_substitution = substitution
-
-        return best_substitution
-
-    def find_all_hypothesis_and_word_scores(self, predictions, scores, predicted_words):
-        all_hypothesis_words = []
-        all_word_scores = []
-
-        for i in range(len(predictions)):
-            for j in range(len(predictions[i])):
-                hypothesis_sentence = "".join(predicted_words[i][j])
-                hypothesis_words = hypothesis_sentence.split()
-                word_scores = []
-                token_index = 0
-                for hypothesis_word in hypothesis_words:
-                    word_score = 0.0
-                    # Number of tokens in the word
-                    token_count = len(hypothesis_word)
-
-                    # Accumulate scores for each token in the word
-                    for _ in range(token_count):
-                        token_score = scores[i][j][token_index]
-                        word_score += token_score
-                        token_index += 1
-
-                    # Average the scores for the tokens in the word
-                    word_score /= token_count
-
-                    word_scores.append(word_score.item())
-
-                assert(len(hypothesis_words) == len(word_scores))
-
-                all_hypothesis_words.append(hypothesis_words)
-                all_word_scores.append(word_scores)
-            
-        assert(len(all_hypothesis_words) == len(all_word_scores))
-
-        # Normalize the word scores
-        max_score = max([max(scores) for scores in all_word_scores])
-        all_word_scores = [[score / max_score for score in scores] for scores in all_word_scores]
-
-        return all_hypothesis_words, all_word_scores
-
-    def transcribe_batch(self, wavs, wav_lens, top_k=1, substitution_threshold=0.5):
+        Converts a list of scores to probabilities using softmax.
         """
-        Transcribes the input audio into a sequence of words
+        probs = []
 
-        The waveforms should already be in the model's desired format.
-        You can call:
-        ``normalized = EncoderASR.normalzizer(signal, sample_rate)``
-        to get a correctly converted signal in most cases.
+        for score_list in scores[0]:
+            probs_list = torch.nn.functional.softmax(torch.tensor(score_list), dim=0).tolist()
+            probs.append(probs_list)
+
+        return [probs]
+
+    def transcribe_batch(self, wavs, wav_lens, top_k=2, confidence_threshold=0.5):
+        """
+        Transcribes the input audio into a sequence of words with branching on low confidence tokens.
 
         Arguments
         ---------
@@ -277,6 +252,10 @@ class CustomEncoder(EncoderASR):
             batch, tensor of shape [batch]. The longest one should have
             relative length 1.0 and others len(waveform) / max_length.
             Used for ignoring padding.
+        top_k : int
+            Number of top predictions to consider at each step.
+        confidence_threshold : float
+            The threshold below which a token is considered low confidence.
 
         Returns
         -------
@@ -287,48 +266,24 @@ class CustomEncoder(EncoderASR):
         """
 
         with torch.no_grad():
-            wav_lens = wav_lens.to(self.device)
+            # Encodes the input audio from a waveform into a sequence of tokens
             encoder_out = self.encode_batch(wavs, wav_lens)
+
+            # Decodes the encoded audio into a sequence of tokens
             predictions, scores = self.decode_probs(encoder_out, wav_lens, blank_id=0, top_k=top_k)
-            
-            if isinstance(self.tokenizer, speechbrain.dataio.encoder.CTCTextEncoder):
-                predicted_words = [[self.tokenizer.decode_ndim(token_seq)
-                                    for token_seq in predict_subset]
-                                   for predict_subset in predictions]
-            elif isinstance(self.tokenizer, sentencepiece.SentencePieceProcessor):
-                predicted_words = [[
-                    self.tokenizer.decode_ids(token_seq)
-                    for token_seq in predict_subset
-                ] for predict_subset in predictions]
-            else:
-                sys.exit("The tokenizer must be sentencepiece or CTCTextEncoder")
 
-            # Sanity checks
-            assert(len(predictions) == len(scores) == len(predicted_words))
-            assert(len(predictions[0][0]) == len(scores[0][0]) == len(predicted_words[0][0]))
+            # Convert the list of scores to a list of probabilities
+            probs = self.scores_to_probs(scores)
 
-            all_hypothesis_words, all_word_scores = self.find_all_hypothesis_and_word_scores(predictions, scores, predicted_words)
+            # Converts the predicted token ids into a list of tokens for each sentence
+            predicted_words = self.tokenize_predictions(predictions)
 
-            # Word substitution step
-            for i, (hypothesis_words, word_scores) in enumerate(zip(all_hypothesis_words, all_word_scores)):
-                hypothesis_string = " ".join(hypothesis_words)
-                for k, (hypothesis_word, word_score) in enumerate(zip(hypothesis_words, word_scores)):
-                    if word_score < substitution_threshold:
-                        substitutions = self.generate_substitutions(hypothesis_word)
-                        substitute_word = self.select_best_substitution(substitutions, hypothesis_word)
-                        if substitute_word is not None:
-                            substitute_word_length = len(substitute_word)
-                            start_index = hypothesis_string.index(hypothesis_word)
-                            predicted_words[0][i] = predicted_words[0][i][:start_index] + [char for char in substitute_word] + predicted_words[0][i][start_index + substitute_word_length:]
-                            predictions[0][i] = predictions[0][i][:start_index] + [self.tokenizer.encode_sequence(char)[0] for char in substitute_word] + predictions[0][i][start_index + substitute_word_length:]
-                            scores[0][i] = scores[0][i][:start_index] + [torch.tensor(1.0) for char in substitute_word] + scores[0][i][start_index + substitute_word_length:]
-                            print(f'Substituted {hypothesis_word} for {substitute_word}')
+            # Uses beam search decoding to replace low confidence tokens with the next best prediction
+            # Updates the predicted_words, predictions, and scores lists
+            predicted_words, predictions, scores = self.beam_search_decoding(predicted_words[0], predictions[0], scores[0], confidence_threshold, probs[0])
 
-                            # Sanity checks
-                            assert(len(predictions[0][i]) == len(scores[0][i]) == len(predicted_words[0][i]))
-
-        return predicted_words, predictions, scores
-
+        print("LEN", len(predicted_words), len(predictions), len(scores))
+        return [predicted_words], [predictions], [scores]
 
 # wavs, wav_lens, ref_text = zip(*[(x["speech"].numpy(), x["speech"].shape[0], x['text'].numpy().decode()) for idx, x in enumerate(ds[subset]) if idx<max_samples])
 
@@ -388,8 +343,8 @@ def parse_mistakes(ref_text: str, hyp_tokens: list[str], scores: list[torch.Tens
         else:
             report["sub"].append(i)
 
-    if report["total"]:
-        visualize_confidence(hyp_tokens, list(ref_text), scores, report)
+    # if report["total"]:
+    #     visualize_confidence(hyp_tokens, list(ref_text), scores, report)
 
     return report, ref, hyp
 
@@ -575,4 +530,4 @@ Hypothesis(es):
 
 if __name__ == "__main__":
 
-    main(50, 1, 2, start_idx=400)
+    main(50, 2, 2, start_idx=400)
